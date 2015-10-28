@@ -130,7 +130,6 @@ func (dh *DockerHelper) PullImage(imageName string) error {
 	err := dh.client.PullImage(pullImageOpts, auth)
 	if err != nil {
 		return err
-
 	}
 
 	util.Log.Debugln(buf.String())
@@ -144,7 +143,7 @@ func (dh *DockerHelper) PullImage(imageName string) error {
 
 func (dh *DockerHelper) CreateAndRun(containerOpts docker.CreateContainerOptions) (*docker.Container, error) {
 
-	util.Log.Infoln("Pulling image", containerOpts.Config.Image)
+	util.Log.Infoln("Pulling image")
 	err := dh.PullImage(containerOpts.Config.Image)
 	if err != nil {
 		return nil, err

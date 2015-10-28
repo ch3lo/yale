@@ -33,11 +33,15 @@ func dockerCfgPath() string {
 	return p
 }
 
-func setupLogger(config logConfig) error {
+func setupLogger(debug bool, config logConfig) error {
 	var err error
 
 	if util.Log.Level, err = log.ParseLevel(config.LogLevel); err != nil {
 		return err
+	}
+
+	if debug {
+		util.Log.Level = log.DebugLevel
 	}
 
 	switch config.LogFormatter {
@@ -56,11 +60,8 @@ func setupLogger(config logConfig) error {
 	}
 
 	switch config.LogOutput {
-	case "stdout":
+	case "console":
 		util.Log.Out = os.Stdout
-		break
-	case "stderr":
-		util.Log.Out = os.Stderr
 		break
 	case "file":
 		util.Log.Out = logFile
@@ -74,6 +75,10 @@ func setupLogger(config logConfig) error {
 
 func globalFlags() []cli.Flag {
 	flags := []cli.Flag{
+		cli.BoolFlag{
+			Name:  "debug",
+			Usage: "Modo de verbosidad debug",
+		},
 		cli.StringSliceFlag{
 			Name:   "endpoint, ep",
 			Usage:  "Endpoint de la API de Docker",
@@ -126,7 +131,7 @@ func globalFlags() []cli.Flag {
 		cli.StringFlag{
 			Name:   "log-output",
 			Value:  "file",
-			Usage:  "Output de los logs",
+			Usage:  "Output de los logs. console | file",
 			EnvVar: "DEPLOYER_LOG_OUTPUT",
 		},
 	}
@@ -155,7 +160,7 @@ func setupGlobalFlags(c *cli.Context) error {
 
 	var err error
 
-	if err = setupLogger(config); err != nil {
+	if err = setupLogger(c.Bool("debug"), config); err != nil {
 		fmt.Println("Nivel de log invalido")
 		return err
 	}

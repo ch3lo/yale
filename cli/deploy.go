@@ -121,19 +121,19 @@ func deployBefore(c *cli.Context) error {
 	return nil
 }
 
-func callbackNotification(callbackUrl string, callbackJob string, token string, input []callbackResume) {
+func callbackNotification(callbackUrl string, callbackJob string, token string, resume []callbackResume) {
 	util.PrintfAndLogInfof("Senting notification to %s", callbackUrl)
 
-	jsonResume, err := json.Marshal(input)
+	jsonResume, err := json.Marshal(resume)
 	if err != nil {
-		util.Log.Errorf("No se pudo procesar %s", input, err)
+		util.Log.Errorf("No se pudo procesar %s", resume, err)
 		return
 	}
 
 	data := url.Values{}
 	data.Set("job", callbackJob)
 	data.Set("token", token)
-	data.Set("input", string(jsonResume))
+	data.Set("services", string(jsonResume))
 
 	util.Log.Debugf("Notificaion data: %s", data.Encode())
 

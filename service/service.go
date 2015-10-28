@@ -146,6 +146,8 @@ func (ds *DockerService) Run() {
 	ds.container, err = ds.dockerCli().CreateAndRun(ds.config)
 
 	if err != nil {
+		util.Log.Errorf("Run error: %s", err)
+		fmt.Printf("Container Run with error: %s", err)
 		ds.SetStatus(FAILED)
 		return
 	}
