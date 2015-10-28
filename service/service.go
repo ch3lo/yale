@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 
 	"github.com/Pallinder/go-randomdata"
 	"github.com/ch3lo/yale/helper"
@@ -45,60 +44,35 @@ type ServiceConfig struct {
 	Publish        []string
 }
 
+func (s ServiceConfig) String() string {
+	return fmt.Sprintf("ImageName: %s - Tag: %s - Envs - %s - Healthy: %s - HealthyRetries: %d - Publish: %#v", s.ImageName, s.Tag, util.MaskEnv(s.Envs), s.Healthy, s.HealthyRetries, s.Publish)
+}
+
 type DockerService struct {
 	Id              string
 	Status          Status
 	statusChannel   chan<- string
 	dockerApihelper *helper.DockerHelper
 	container       *docker.Container
-	config          docker.CreateContainerOptions
 }
 
-func NewDockerService(prefixId string, dh *helper.DockerHelper, serviceConfig ServiceConfig, sc chan<- string) *DockerService {
+func NewDockerService(prefixId string, dh *helper.DockerHelper, sc chan<- string) *DockerService {
 	ds := new(DockerService)
 	ds.Id = prefixId + "_" + randomdata.SillyName()
 	ds.dockerApihelper = dh
 	ds.Status = INIT
 	ds.statusChannel = sc
 
-	dockerConfig := docker.Config{
-		Image: serviceConfig.ImageName + ":" + serviceConfig.Tag,
-		Env:   serviceConfig.Envs,
-	}
-
-	dockerHostConfig := docker.HostConfig{
-		Binds:           []string{"/var/log/service/:/var/log/service/"},
-		PortBindings:    ds.bindPort(serviceConfig.Publish),
-		PublishAllPorts: false,
-		Privileged:      false,
-	}
-
-	opts := docker.CreateContainerOptions{
-		Config:     &dockerConfig,
-		HostConfig: &dockerHostConfig}
-
-	ds.config = opts
-
-	util.PrintfAndLogInfof("Setting Up Service %s:", ds.Id)
-	util.Log.Debugf("Image: %s", dockerConfig.Image)
-	util.Log.Debugf("Envs: %s", maskEnv(dockerConfig.Env))
-	util.Log.Debugf("Publish: %s", dockerHostConfig.PortBindings)
+	util.Log.Infof("Setting Up Service %s", ds.Id)
 
 	return ds
 }
 
-func maskEnv(unmaskedEnvs []string) []string {
-	var maskedEnvs []string
-	for _, val := range unmaskedEnvs {
-		kv := strings.Split(val, "=")
-		if strings.Contains(kv[0], "pass") {
-			maskedEnvs = append(maskedEnvs, kv[0]+"="+"*****")
-		} else {
-			maskedEnvs = append(maskedEnvs, val)
-		}
-	}
+func NewFromContainer(prefixId string, dh *helper.DockerHelper, container *docker.Container, sc chan<- string) *DockerService {
+	ds := NewDockerService(prefixId, dh, sc)
+	ds.container = container
 
-	return maskedEnvs
+	return ds
 }
 
 func (ds *DockerService) GetId() string {
@@ -106,7 +80,6 @@ func (ds *DockerService) GetId() string {
 }
 
 func (ds *DockerService) RegistratorId() string {
-	ds.container, _ = ds.dockerCli().ContainerInspect(ds.container.ID)
 	return ds.container.Node.Name + ":" + ds.container.Name[1:] + ":8080"
 }
 
@@ -140,10 +113,26 @@ func (ds *DockerService) SetStatus(status Status) {
 	ds.statusChannel <- ds.Id
 }
 
-func (ds *DockerService) Run() {
-	var err error
+func (ds *DockerService) Run(serviceConfig ServiceConfig) {
 
-	ds.container, err = ds.dockerCli().CreateAndRun(ds.config)
+	dockerConfig := docker.Config{
+		Image: serviceConfig.ImageName + ":" + serviceConfig.Tag,
+		Env:   serviceConfig.Envs,
+	}
+
+	dockerHostConfig := docker.HostConfig{
+		Binds:           []string{"/var/log/service/:/var/log/service/"},
+		PortBindings:    ds.bindPort(serviceConfig.Publish),
+		PublishAllPorts: false,
+		Privileged:      false,
+	}
+
+	opts := docker.CreateContainerOptions{
+		Config:     &dockerConfig,
+		HostConfig: &dockerHostConfig}
+
+	var err error
+	ds.container, err = ds.dockerCli().CreateAndRun(opts)
 
 	if err != nil {
 		util.Log.Errorf("Run error: %s", err)
@@ -166,6 +155,35 @@ func (ds *DockerService) Undeploy() {
 	} else {
 		util.Log.Warnf("Container Instance not found %s", ds.Id)
 	}
+}
+
+func (ds *DockerService) ContainerName() string {
+	return ds.container.Name
+}
+
+func (ds *DockerService) ContainerImageName() string {
+	return ds.container.Config.Image
+}
+
+func (ds *DockerService) ContainerNode() string {
+	return ds.container.Node.Name
+}
+
+func (ds *DockerService) ContainerStatus() string {
+	return ds.container.State.String()
+}
+
+func (ds *DockerService) PublicPorts() map[int64]int64 {
+	ports := make(map[int64]int64)
+	util.Log.Debugf("Api Ports %#v", ds.container.NetworkSettings.PortMappingAPI())
+	for _, val := range ds.container.NetworkSettings.PortMappingAPI() {
+		util.Log.Debugf("Private Port [%d] Public Port [%d]", val.PrivatePort, val.PublicPort)
+		if val.PrivatePort != 0 && val.PublicPort != 0 {
+			ports[val.PrivatePort] = val.PublicPort
+		}
+	}
+
+	return ports
 }
 
 func (ds *DockerService) AddressAndPort(internalPort int64) (string, error) {

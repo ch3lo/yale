@@ -40,17 +40,15 @@ func listCmd(c *cli.Context) {
 	for stackKey, containers := range stackMap {
 		for _, c := range containers {
 			var ports string
-			for _, port := range c.Ports {
-				if port.PublicPort != 0 {
-					ports = ports + strconv.FormatInt(port.PublicPort, 10) + "->" + strconv.FormatInt(port.PrivatePort, 10) + "/" + port.Type + " "
-				}
+			for key, val := range c.PublicPorts() {
+				ports = ports + strconv.FormatInt(val, 10) + "->" + strconv.FormatInt(key, 10) + " "
 			}
-			data = append(data, []string{stackKey, c.Names[0], c.Image, c.Status, ports})
+			data = append(data, []string{stackKey, c.ContainerNode(), c.ContainerName(), c.ContainerImageName(), c.ContainerStatus(), ports})
 		}
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Endpoint", "Name", "Image", "Status", "Ports"})
+	table.SetHeader([]string{"Stack", "Node", "Name", "Image", "Status", "Ports"})
 
 	for _, v := range data {
 		table.Append(v)

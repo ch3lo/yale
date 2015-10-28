@@ -175,6 +175,8 @@ func deployCmd(c *cli.Context) {
 		Publish:        []string{"8080/tcp"}, // TODO desplegar puertos que no sean 8080
 	}
 
+	util.Log.Debugf("Service Configuration: %#v", serviceConfig.String())
+
 	handleDeploySigTerm(stackManager)
 	if stackManager.Deploy(serviceConfig, c.Bool("replace"), c.Int("instances"), c.Float64("tolerance")) {
 		fmt.Println("Proceso de deploy ok")

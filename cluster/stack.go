@@ -28,27 +28,20 @@ func (s StackStatus) String() string {
 
 type Stack struct {
 	id                    string
-	serviceConfig         service.ServiceConfig
 	dockerApiHelper       *helper.DockerHelper
 	services              []*service.DockerService // refactorizar a interfaz service
 	serviceIdNotification chan string
 	stackNofitication     chan<- StackStatus
 	monitor               monitor.Monitor
-	TotalInstances        int
-	Tolerance             float64
 }
 
-func NewStack(stackKey string, serviceConfig service.ServiceConfig, stackNofitication chan<- StackStatus, dh *helper.DockerHelper) *Stack {
+func NewStack(stackKey string, stackNofitication chan<- StackStatus, dh *helper.DockerHelper) *Stack {
 	sm := new(Stack)
 	sm.id = stackKey + "_" + randomdata.Country(randomdata.TwoCharCountry)
-	sm.serviceConfig = serviceConfig
 	sm.stackNofitication = stackNofitication
 	sm.dockerApiHelper = dh
 
 	sm.serviceIdNotification = make(chan string)
-	sm.TotalInstances = 1
-	sm.Tolerance = 0.5
-	sm.monitor = createMonitor(serviceConfig.Healthy, serviceConfig.HealthyRetries)
 
 	return sm
 }
@@ -65,14 +58,15 @@ func createMonitor(healthyPath string, healthyRetries int) monitor.Monitor {
 	return mon
 }
 
-func (sm *Stack) DeployInstances() {
+func (sm *Stack) DeployInstances(serviceConfig service.ServiceConfig, instances int, tolerance float64) {
+	sm.monitor = createMonitor(serviceConfig.Healthy, serviceConfig.HealthyRetries)
 
-	for i := 0; i < sm.TotalInstances; i++ {
+	for i := 0; i < instances; i++ {
 		util.Log.Debugf("Deploying instance number %d in stack %s", i, sm.id)
-		sm.deployOneInstance()
+		sm.deployOneInstance(serviceConfig)
 	}
 
-	if !sm.checkInstances() {
+	if !sm.checkInstances(serviceConfig, instances, tolerance) {
 		sm.stackNofitication <- STACK_FAILED
 		return
 	}
@@ -84,12 +78,12 @@ func (sm *Stack) addNewService(dockerService *service.DockerService) {
 	sm.services = append(sm.services, dockerService)
 }
 
-func (sm *Stack) deployOneInstance() {
-	dockerService := service.NewDockerService(sm.id, sm.dockerApiHelper, sm.serviceConfig, sm.serviceIdNotification)
+func (sm *Stack) deployOneInstance(serviceConfig service.ServiceConfig) {
+	dockerService := service.NewDockerService(sm.id, sm.dockerApiHelper, sm.serviceIdNotification)
 	sm.addNewService(dockerService)
 
 	util.PrintfAndLogInfof("Deploying Service with ID %s in background", dockerService.GetId())
-	go dockerService.Run()
+	go dockerService.Run(serviceConfig)
 }
 
 func (sm *Stack) undeployInstance(serviceId string) {
@@ -97,6 +91,7 @@ func (sm *Stack) undeployInstance(serviceId string) {
 	util.PrintfAndLogInfof("Undeploying Service %s", serviceId)
 	dockerService.Undeploy()
 }
+
 func (sm *Stack) UndeployAll() {
 	for _, srv := range sm.services {
 		sm.undeployInstance(srv.GetId())
@@ -127,7 +122,7 @@ func (sm *Stack) countServicesWithStatus(status service.Status) int {
 	return len(sm.ServicesWithStatus(status))
 }
 
-func (sm *Stack) checkInstances() bool {
+func (sm *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstances int, tolerance float64) bool {
 	for {
 		util.Log.Infoln("Waiting for signal")
 		serviceId := <-sm.serviceIdNotification
@@ -149,20 +144,20 @@ func (sm *Stack) checkInstances() bool {
 
 			failedInstances := sm.countServicesWithStatus(service.FAILED)
 
-			maxFailedServices := float64(sm.TotalInstances) * sm.Tolerance
+			maxFailedServices := float64(totalInstances) * tolerance
 			util.Log.Debugf("Failed Services %f", float64(failedInstances))
 			util.Log.Debugf("Fail Tolerance %f", maxFailedServices)
 			if float64(failedInstances) < maxFailedServices {
 				util.Log.Debugf("Accepted Tolerance")
-				sm.deployOneInstance()
+				sm.deployOneInstance(serviceConfig)
 			} else {
-				fmt.Printf("Services resume: success %d - failed %d - total %d (tolerance %f)\n", okInstances, failedInstances, sm.TotalInstances, sm.Tolerance)
+				fmt.Printf("Services resume: success %d - failed %d - total %d (tolerance %f)\n", okInstances, failedInstances, totalInstances, tolerance)
 				return false
 			}
 		}
 
-		util.PrintfAndLogInfof("Services resume %d/%d", okInstances, sm.TotalInstances)
-		if okInstances == sm.TotalInstances {
+		util.PrintfAndLogInfof("Services resume %d/%d", okInstances, totalInstances)
+		if okInstances == totalInstances {
 			return true
 		}
 	}
@@ -170,7 +165,7 @@ func (sm *Stack) checkInstances() bool {
 	okInstances := sm.countServicesWithStatus(service.READY)
 	failedInstances := sm.countServicesWithStatus(service.FAILED)
 
-	fmt.Printf("Services resume: success %d - failed %d - total %d (tolerance %f)\n", okInstances, failedInstances, sm.TotalInstances, sm.Tolerance)
+	fmt.Printf("Services resume: success %d - failed %d - total %d (tolerance %f)\n", okInstances, failedInstances, totalInstances, tolerance)
 	return false
 }
 
@@ -194,4 +189,26 @@ func (sm *Stack) checkHealthy(ds *service.DockerService) {
 	} else {
 		ds.SetStatus(service.FAILED)
 	}
+}
+
+func (s *Stack) LoadContainers(imageNameFilter string, containerNameFilter string) error {
+	filter := helper.NewContainerFilter()
+	//filter.Status = []string{"running"}
+	filter.ImageRegexp = imageNameFilter
+	filter.NameRegexp = containerNameFilter
+
+	containers, err := s.dockerApiHelper.ListContainers(filter)
+	if err != nil {
+		return err
+	}
+
+	for k := range containers {
+		c, err := s.dockerApiHelper.ContainerInspect(containers[k].ID)
+		if err != nil {
+			return err
+		}
+		s.services = append(s.services, service.NewFromContainer(s.id, s.dockerApiHelper, c, s.serviceIdNotification))
+	}
+
+	return nil
 }

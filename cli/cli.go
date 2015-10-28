@@ -113,7 +113,7 @@ func globalFlags() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:   "log-level",
-			Value:  "debug",
+			Value:  "info",
 			Usage:  "Nivel de verbosidad de log",
 			EnvVar: "DEPLOYER_LOG_LEVEL",
 		},
@@ -181,10 +181,8 @@ func setupGlobalFlags(c *cli.Context) error {
 			fmt.Println("Endpoint de Docker invalido")
 			return err
 		}
-		stackManager.AddDockerApiEndpoint(dh)
+		stackManager.AppendStack(dh)
 	}
-
-	util.Log.Debugf("%#v", config)
 
 	return nil
 }
@@ -215,5 +213,6 @@ func RunApp() {
 	err = app.Run(os.Args)
 	if err != nil {
 		util.Log.Fatalln(err)
+		panic(err)
 	}
 }
