@@ -58,20 +58,24 @@ func createMonitor(healthyPath string, healthyRetries int) monitor.Monitor {
 	return mon
 }
 
-func (sm *Stack) DeployInstances(serviceConfig service.ServiceConfig, instances int, tolerance float64) {
+func (sm *Stack) DeployCheckAndNotify(serviceConfig service.ServiceConfig, instances int, tolerance float64) {
 	sm.monitor = createMonitor(serviceConfig.Healthy, serviceConfig.HealthyRetries)
 
-	for i := 0; i < instances; i++ {
+	for i := 1; i <= instances; i++ {
 		util.Log.Debugf("Deploying instance number %d in stack %s", i, sm.id)
 		sm.deployOneInstance(serviceConfig)
 	}
 
-	if !sm.checkInstances(serviceConfig, instances, tolerance) {
-		sm.stackNofitication <- STACK_FAILED
+	if sm.checkInstances(serviceConfig, instances, tolerance) {
+		sm.SetStatus(STACK_READY)
 		return
 	}
 
-	sm.stackNofitication <- STACK_READY
+	sm.SetStatus(STACK_FAILED)
+}
+
+func (sm *Stack) SetStatus(status StackStatus) {
+	sm.stackNofitication <- status
 }
 
 func (sm *Stack) addNewService(dockerService *service.DockerService) {
@@ -92,9 +96,22 @@ func (sm *Stack) undeployInstance(serviceId string) {
 	dockerService.Undeploy()
 }
 
-func (sm *Stack) UndeployAll() {
+func (sm *Stack) Rollback() {
 	for _, srv := range sm.services {
+		if srv.Status != service.LOADED {
+			sm.undeployInstance(srv.GetId())
+		}
+	}
+}
+
+func (sm *Stack) UndeployInstances(total int) {
+	undeployed := 0
+	for _, srv := range sm.services {
+		if undeployed == total {
+			return
+		}
 		sm.undeployInstance(srv.GetId())
+		undeployed++
 	}
 }
 

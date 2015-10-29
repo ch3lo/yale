@@ -40,22 +40,32 @@ func (sm *StackManager) AppendStack(dh *helper.DockerHelper) {
 	}
 }
 
-func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, replace bool, instances int, tolerance float64) bool {
-
-	if replace {
-		sm.replaceContainers(serviceConfig.ImageName)
-	}
+func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, instances int, tolerance float64) bool {
+	sm.loadContainers(serviceConfig.ImageName+":"+serviceConfig.Version(), ".*")
 
 	for stackKey, _ := range sm.stacks {
-		util.Log.Debugf("Creating Stack with ID: %s", stackKey)
-		go sm.stacks[stackKey].DeployInstances(serviceConfig, instances, tolerance)
+		currentContainers := sm.stacks[stackKey].countServicesWithStatus(service.LOADED)
+
+		if currentContainers == instances {
+			util.PrintfAndLogInfof("Stack %s was deployed", stackKey)
+			sm.stacks[stackKey].SetStatus(STACK_READY)
+		} else if currentContainers < instances {
+			diff := instances - currentContainers
+			util.PrintfAndLogInfof("Stack %s has %d from %d containers ", stackKey, currentContainers, instances)
+			go sm.stacks[stackKey].DeployCheckAndNotify(serviceConfig, diff, tolerance)
+		} else {
+			diff := currentContainers - instances
+			util.PrintfAndLogInfof("Stack %s has more containers than needed (%d from %d), undeploying...", stackKey, currentContainers, instances)
+			sm.stacks[stackKey].UndeployInstances(diff)
+			sm.stacks[stackKey].SetStatus(STACK_READY)
+		}
 	}
 
 	for i := 0; i < len(sm.stacks); i++ {
 		stackStatus := <-sm.stackNotification
 		util.Log.Infoln("POD STATUS RECEIVED", stackStatus)
 		if stackStatus == STACK_FAILED {
-			sm.UndeployAll()
+			sm.Rollback()
 			return false
 		}
 	}
@@ -65,47 +75,52 @@ func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, replace bool
 func (sm *StackManager) DeployedContainers() []*service.DockerService {
 	var containers []*service.DockerService
 
-	for key, _ := range sm.stacks {
-		containers = append(containers, sm.stacks[key].ServicesWithStatus(service.READY)...)
+	for stackKey, _ := range sm.stacks {
+		containers = append(containers, sm.stacks[stackKey].ServicesWithStatus(service.READY)...)
 	}
 
 	return containers
 }
 
 func (sm *StackManager) SearchContainers(imageNameFilter string, containerNameFilter string) (map[string][]*service.DockerService, error) {
-	filter := helper.NewContainerFilter()
-	//filter.Status = []string{"running"}
-	filter.ImageRegexp = imageNameFilter
-	filter.NameRegexp = containerNameFilter
+	if err := sm.loadContainers(imageNameFilter, containerNameFilter); err != nil {
+		return nil, err
+	}
 
 	containers := make(map[string][]*service.DockerService)
-
 	for stackKey, _ := range sm.stacks {
-		if err := sm.stacks[stackKey].LoadContainers(imageNameFilter, containerNameFilter); err != nil {
-			return nil, err
-		}
 		containers[stackKey] = append(containers[stackKey], sm.stacks[stackKey].services...)
 	}
 
 	return containers, nil
 }
 
-func (sm *StackManager) replaceContainers(imageName string) error {
-	util.Log.Debugf("Init Replace %s", imageName)
+/*
+func (sm *StackManager) replaceContainers(imageNameFilter string) error {
+	util.Log.Debugf("Init Replace %s", imageNameFilter)
+
+	if err := sm.loadContainers(imageNameFilter, ".*"); err != nil {
+		return err
+	}
+	sm.UndeployAll()
+
+	return nil
+}*/
+
+func (sm *StackManager) loadContainers(imageNameFilter string, containerNameFilter string) error {
+	util.Log.Debugf("Loading containers with image name: %s", imageNameFilter)
 
 	for stackKey, _ := range sm.stacks {
-		if err := sm.stacks[stackKey].LoadContainers(imageName, ".*"); err != nil {
+		if err := sm.stacks[stackKey].LoadContainers(imageNameFilter, containerNameFilter); err != nil {
 			return err
 		}
 	}
 
-	sm.UndeployAll()
-
 	return nil
 }
 
-func (pm *StackManager) UndeployAll() {
-	for stack, _ := range pm.stacks {
-		pm.stacks[stack].UndeployAll()
+func (sm *StackManager) Rollback() {
+	for stack, _ := range sm.stacks {
+		sm.stacks[stack].Rollback()
 	}
 }

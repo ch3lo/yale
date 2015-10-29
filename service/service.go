@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 
 	"github.com/Pallinder/go-randomdata"
@@ -21,6 +22,7 @@ const (
 	READY
 	FAILED
 	UNDEPLOYED
+	LOADED
 )
 
 var status = [...]string{
@@ -29,6 +31,7 @@ var status = [...]string{
 	"READY",
 	"FAILED",
 	"UNDEPLOYED",
+	"LOADED",
 }
 
 func (s Status) String() string {
@@ -44,7 +47,13 @@ type ServiceConfig struct {
 	Publish        []string
 }
 
-func (s ServiceConfig) String() string {
+func (s *ServiceConfig) Version() string {
+	rp := regexp.MustCompile("(\\d|\\.)+-")
+	result := rp.FindStringSubmatch(s.Tag)
+	return result[0]
+}
+
+func (s *ServiceConfig) String() string {
 	return fmt.Sprintf("ImageName: %s - Tag: %s - Envs - %s - Healthy: %s - HealthyRetries: %d - Publish: %#v", s.ImageName, s.Tag, util.MaskEnv(s.Envs), s.Healthy, s.HealthyRetries, s.Publish)
 }
 
@@ -71,6 +80,7 @@ func NewDockerService(prefixId string, dh *helper.DockerHelper, sc chan<- string
 func NewFromContainer(prefixId string, dh *helper.DockerHelper, container *docker.Container, sc chan<- string) *DockerService {
 	ds := NewDockerService(prefixId, dh, sc)
 	ds.container = container
+	ds.Status = LOADED
 
 	return ds
 }

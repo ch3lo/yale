@@ -18,13 +18,13 @@ import (
 	"github.com/codegangsta/cli"
 )
 
-func handleDeploySigTerm(pm *cluster.StackManager) {
+func handleDeploySigTerm(sm *cluster.StackManager) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	signal.Notify(c, syscall.SIGTERM)
 	go func() {
 		<-c
-		pm.UndeployAll()
+		sm.Rollback()
 		os.Exit(1)
 	}()
 }
@@ -42,7 +42,7 @@ func deployFlags() []cli.Flag {
 		cli.IntFlag{
 			Name:  "instances",
 			Value: 1,
-			Usage: "Total de instancias a desplegar en en cada uno de los Enpoints entregados y que tengan estado de Healthy Check exitoso.",
+			Usage: "Total de servicios que se quieren obtener en cada uno de los stack.",
 		},
 		cli.Float64Flag{
 			Name:  "tolerance",
@@ -63,11 +63,11 @@ func deployFlags() []cli.Flag {
 		cli.StringSliceFlag{
 			Name:  "env-file",
 			Usage: "Archivo con variables de entorno",
-		},
-		cli.BoolFlag{
-			Name:  "replace",
-			Usage: "Reemplaza los contenedores que tengan el mismo nombre de imagen",
-		},
+		}, /*
+			cli.BoolFlag{
+				Name:  "replace",
+				Usage: "Reemplaza los contenedores que tengan el mismo nombre de imagen",
+			},*/
 		cli.StringFlag{
 			Name:   "callback-url",
 			Value:  "https://jenkinsdomain.com/buildByToken/buildWithParameters",
@@ -178,7 +178,7 @@ func deployCmd(c *cli.Context) {
 	util.Log.Debugf("Service Configuration: %#v", serviceConfig.String())
 
 	handleDeploySigTerm(stackManager)
-	if stackManager.Deploy(serviceConfig, c.Bool("replace"), c.Int("instances"), c.Float64("tolerance")) {
+	if stackManager.Deploy(serviceConfig, c.Int("instances"), c.Float64("tolerance")) {
 		fmt.Println("Proceso de deploy ok")
 		services := stackManager.DeployedContainers()
 		var resume []callbackResume

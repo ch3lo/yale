@@ -44,6 +44,18 @@ func NewDockerHelper(apiEndpoint string, authCfg string) (*DockerHelper, error) 
 	return dh, nil
 }
 
+func NewDockerTlsVerifyHelper(apiEndpoint string, authCfg string, cert string, key string, ca string) (*DockerHelper, error) {
+	dh := new(DockerHelper)
+	dh.authConfigPath = authCfg
+	var err error
+	dh.client, err = docker.NewTLSClient(apiEndpoint, cert, key, ca)
+	if err != nil {
+		return nil, err
+	}
+
+	return dh, nil
+}
+
 func NewDockerTlsHelper(apiEndpoint string, authCfg string, cert string, key string) (*DockerHelper, error) {
 	dh := new(DockerHelper)
 	dh.authConfigPath = authCfg
