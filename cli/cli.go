@@ -193,8 +193,9 @@ func setupGlobalFlags(c *cli.Context) error {
 		} else {
 			dh, err = helper.NewDockerHelper(ep, c.String("auth-file"))
 		}
+
 		if err != nil {
-			fmt.Println("Endpoint de Docker invalido")
+			fmt.Println("No se pudo configurar el endpoint de Docker")
 			return err
 		}
 		stackManager.AppendStack(dh)
@@ -228,6 +229,7 @@ func RunApp() {
 
 	err = app.Run(os.Args)
 	if err != nil {
+		fmt.Println(err)
 		util.Log.Fatalln(err)
 		panic(err)
 	}

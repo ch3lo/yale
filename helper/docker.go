@@ -119,7 +119,7 @@ func (dh *DockerHelper) ListContainers(filter *containerFilter) ([]docker.APICon
 
 	var filteredContainers []docker.APIContainers
 	for _, container := range containers {
-		util.Log.Debugf("Container %# v", container)
+		util.Log.Debugf("Container %#v", container)
 
 		if validName.MatchString(container.Names[0]) && validImage.MatchString(container.Image) {
 			filteredContainers = append(filteredContainers, container)
@@ -168,9 +168,9 @@ func (dh *DockerHelper) CreateAndRun(containerOpts docker.CreateContainerOptions
 	}
 
 	util.Log.Infoln("Starting container", container.Name)
-	errContainer := dh.client.StartContainer(container.ID, nil)
-	if errContainer != nil {
-		return nil, errContainer
+	err = dh.client.StartContainer(container.ID, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	util.Log.Infoln("Pulling container info", container.Name)
@@ -199,7 +199,7 @@ func (dh *DockerHelper) ContainerAddress(containerId string, internalPort int64)
 
 	util.Log.Debugf("Api Ports %#v", container.NetworkSettings.PortMappingAPI())
 	for _, val := range container.NetworkSettings.PortMappingAPI() {
-		util.Log.Debugln("Private Port", val.PrivatePort, "Public Port", val.PublicPort)
+		util.Log.Debugf("Private Port %d - Public Port %d", val.PrivatePort, val.PublicPort)
 		if val.PrivatePort == internalPort {
 			addr := val.IP + ":" + strconv.FormatInt(val.PublicPort, 10)
 			util.Log.Debugf("Calculated Addr %s", addr)
@@ -207,7 +207,7 @@ func (dh *DockerHelper) ContainerAddress(containerId string, internalPort int64)
 		}
 	}
 
-	return "", errors.New("No la direccion para el puerto solicitado")
+	return "", errors.New("Internal Container Port not found")
 }
 
 func (dh *DockerHelper) UndeployContainer(containerId string, remove bool, timeout uint) error {

@@ -17,12 +17,12 @@ import (
 type Status int
 
 const (
-	INIT Status = 1 + iota
-	CREATED
-	READY
-	FAILED
-	UNDEPLOYED
-	LOADED
+	INIT       Status = 1 + iota // Contenedor configurado pero aun no se crea ni corre
+	CREATED                      // Contenedor creado y corriendo pero aún no verificado
+	READY                        // Contenedor que paso exitoso el despliegue
+	FAILED                       // Contenedor que fallo en el despliegue
+	UNDEPLOYED                   // Contenedor removido
+	LOADED                       // Contanedor cargado desde la API
 )
 
 var status = [...]string{
