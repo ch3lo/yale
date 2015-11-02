@@ -48,8 +48,11 @@ type ServiceConfig struct {
 }
 
 func (s *ServiceConfig) Version() string {
-	rp := regexp.MustCompile("(\\d|\\.)+-")
+	rp := regexp.MustCompile("^([\\d\\.]+)-")
 	result := rp.FindStringSubmatch(s.Tag)
+	if result == nil {
+		util.Log.Fatalln("Invalid TAG format")
+	}
 	return result[1]
 }
 
