@@ -41,7 +41,7 @@ func (sm *StackManager) AppendStack(dh *helper.DockerHelper) {
 }
 
 func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, instances int, tolerance float64) bool {
-	sm.loadContainers(serviceConfig.ImageName+":"+serviceConfig.Version(), ".*")
+	sm.loadContainers(serviceConfig.ImageName+":"+serviceConfig.Version()+"-", ".*")
 
 	for stackKey, _ := range sm.stacks {
 		currentContainers := sm.stacks[stackKey].countServicesWithStatus(service.LOADED)

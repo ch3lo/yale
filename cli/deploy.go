@@ -63,6 +63,10 @@ func deployFlags() []cli.Flag {
 		cli.StringSliceFlag{
 			Name:  "env-file",
 			Usage: "Archivo con variables de entorno",
+		},
+		cli.StringSliceFlag{
+			Name:  "env",
+			Usage: "Variables de entorno en formato KEY=VALUE",
 		}, /*
 			cli.BoolFlag{
 				Name:  "replace",
@@ -164,6 +168,10 @@ func deployCmd(c *cli.Context) {
 		util.Log.Errorln("No se pudo procesar el archivo con variables de entorno", err)
 		fmt.Println("No se pudo procesar el archivo con variables de entorno", err)
 		return
+	}
+
+	for _, v := range c.StringSlice("env") {
+		envs = append(envs, v)
 	}
 
 	serviceConfig := service.ServiceConfig{

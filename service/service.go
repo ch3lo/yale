@@ -50,7 +50,7 @@ type ServiceConfig struct {
 func (s *ServiceConfig) Version() string {
 	rp := regexp.MustCompile("(\\d|\\.)+-")
 	result := rp.FindStringSubmatch(s.Tag)
-	return result[0]
+	return result[1]
 }
 
 func (s *ServiceConfig) String() string {
@@ -124,7 +124,6 @@ func (ds *DockerService) SetStatus(status Status) {
 }
 
 func (ds *DockerService) Run(serviceConfig ServiceConfig) {
-
 	dockerConfig := docker.Config{
 		Image: serviceConfig.ImageName + ":" + serviceConfig.Tag,
 		Env:   serviceConfig.Envs,
