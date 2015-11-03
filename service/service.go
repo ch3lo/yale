@@ -177,7 +177,12 @@ func (ds *DockerService) ContainerImageName() string {
 	return ds.container.Config.Image
 }
 
-func (ds *DockerService) ContainerNode() string {
+func (ds *DockerService) ContainerSwarmNode() string {
+
+	if ds.container.Node == nil {
+		return ""
+	}
+
 	return ds.container.Node.Name
 }
 

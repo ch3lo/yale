@@ -43,7 +43,7 @@ func listCmd(c *cli.Context) {
 			for key, val := range c.PublicPorts() {
 				ports = ports + strconv.FormatInt(val, 10) + "->" + strconv.FormatInt(key, 10) + " "
 			}
-			data = append(data, []string{stackKey, c.ContainerNode(), c.ContainerName(), c.ContainerImageName(), c.ContainerStatus(), ports})
+			data = append(data, []string{stackKey, c.ContainerSwarmNode(), c.ContainerName(), c.ContainerImageName(), c.ContainerStatus(), ports})
 		}
 	}
 

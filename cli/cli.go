@@ -99,19 +99,19 @@ func globalFlags() []cli.Flag {
 			EnvVar: "DOCKER_CERT_PATH",
 		},
 		cli.StringFlag{
-			Name:   "ca",
+			Name:   "tlscacert",
 			Value:  "ca.pem",
 			Usage:  "Ruta relativa del archivo con el certificado CA",
 			EnvVar: "DEPLOYER_CERT_CA",
 		},
 		cli.StringFlag{
-			Name:   "cert",
+			Name:   "tlscert",
 			Value:  "cert.pem",
 			Usage:  "Ruta relativa del arhivo con el certificado cliente",
 			EnvVar: "DEPLOYER_CERT_CERT",
 		},
 		cli.StringFlag{
-			Name:   "key",
+			Name:   "tlskey",
 			Value:  "key.pem",
 			Usage:  "Ruta relativa del arhivo con la llave del certificado cliente",
 			EnvVar: "DEPLOYER_CERT_KEY",
@@ -182,13 +182,13 @@ func setupGlobalFlags(c *cli.Context) error {
 		util.Log.Infof("Configuring Docker Endpoint %s", ep)
 		var dh *helper.DockerHelper
 		if c.Bool("tlsverify") {
-			ca := buildCertPath(c.String("cert_path"), c.String("ca"))
-			cert := buildCertPath(c.String("cert_path"), c.String("cert"))
-			key := buildCertPath(c.String("cert_path"), c.String("key"))
+			ca := buildCertPath(c.String("cert_path"), c.String("tlscacert"))
+			cert := buildCertPath(c.String("cert_path"), c.String("tlscert"))
+			key := buildCertPath(c.String("cert_path"), c.String("tlskey"))
 			dh, err = helper.NewDockerTlsVerifyHelper(ep, c.String("auth-file"), cert, key, ca)
 		} else if c.Bool("tls") {
-			cert := buildCertPath(c.String("cert_path"), c.String("cert"))
-			key := buildCertPath(c.String("cert_path"), c.String("key"))
+			cert := buildCertPath(c.String("cert_path"), c.String("tlscert"))
+			key := buildCertPath(c.String("cert_path"), c.String("tlskey"))
 			dh, err = helper.NewDockerTlsHelper(ep, c.String("auth-file"), cert, key)
 		} else {
 			dh, err = helper.NewDockerHelper(ep, c.String("auth-file"))

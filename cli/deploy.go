@@ -67,11 +67,7 @@ func deployFlags() []cli.Flag {
 		cli.StringSliceFlag{
 			Name:  "env",
 			Usage: "Variables de entorno en formato KEY=VALUE",
-		}, /*
-			cli.BoolFlag{
-				Name:  "replace",
-				Usage: "Reemplaza los contenedores que tengan el mismo nombre de imagen",
-			},*/
+		},
 		cli.StringFlag{
 			Name:   "callback-url",
 			Value:  "https://jenkinsdomain.com/buildByToken/buildWithParameters",
@@ -86,12 +82,11 @@ func deployFlags() []cli.Flag {
 			Name:  "callback-token",
 			Usage: "Token de seguridad que se utilizará en el callback",
 		},
-		/*
-			cli.StringSliceFlag{
-				Name:  "port",
-				Value: &cli.StringSlice{"8080"},
-				Usage: "Puerto interno del contenedor a exponer en el Host",
-			},*/
+		cli.StringSliceFlag{
+			Name:  "port",
+			Value: &cli.StringSlice{"8080"},
+			Usage: "Puerto interno del contenedor a exponer en el Host",
+		},
 	}
 }
 

@@ -95,18 +95,6 @@ func (sm *StackManager) SearchContainers(imageNameFilter string, containerNameFi
 	return containers, nil
 }
 
-/*
-func (sm *StackManager) replaceContainers(imageNameFilter string) error {
-	util.Log.Debugf("Init Replace %s", imageNameFilter)
-
-	if err := sm.loadContainers(imageNameFilter, ".*"); err != nil {
-		return err
-	}
-	sm.UndeployAll()
-
-	return nil
-}*/
-
 func (sm *StackManager) loadContainers(imageNameFilter string, containerNameFilter string) error {
 	util.Log.Debugf("Loading containers with image name: %s", imageNameFilter)
 
