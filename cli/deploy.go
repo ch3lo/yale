@@ -92,27 +92,19 @@ func deployFlags() []cli.Flag {
 
 func deployBefore(c *cli.Context) error {
 	if c.String("image") == "" {
-		util.Log.Error("El nombre de la imagen esta vacio")
-		fmt.Println("El nombre de la imagen esta vacio")
 		return errors.New("El nombre de la imagen esta vacio")
 	}
 
 	if c.String("tag") == "" {
-		util.Log.Error("El TAG de la imagen esta vacio")
-		fmt.Println("El TAG de la imagen esta vacio")
 		return errors.New("El TAG de la imagen esta vacio")
 	}
 
 	if c.String("healthy-ep") == "" {
-		util.Log.Error("El endpoint de healthy check esta vacio")
-		fmt.Println("El endpoint de healthy check esta vacio")
 		return errors.New("El endpoint de healthy check esta vacio")
 	}
 
 	for _, file := range c.StringSlice("env-file") {
 		if err := util.FileExists(file); err != nil {
-			util.Log.Errorf("Se produjo un error con el archivo env-file %s: %s", file, err)
-			fmt.Printf("Se produjo un error con el archivo env-file %s: %s", file, err)
 			return errors.New(fmt.Sprintf("El archivo %s con variables de entorno no existe", file))
 		}
 	}
@@ -160,9 +152,7 @@ func deployCmd(c *cli.Context) {
 
 	envs, err := util.ParseMultiFileLinesToArray(c.StringSlice("env-file"))
 	if err != nil {
-		util.Log.Errorln("No se pudo procesar el archivo con variables de entorno", err)
-		fmt.Println("No se pudo procesar el archivo con variables de entorno", err)
-		return
+		util.Log.Fatalln("No se pudo procesar el archivo con variables de entorno", err)
 	}
 
 	for _, v := range c.StringSlice("env") {
@@ -205,6 +195,6 @@ func deployCmd(c *cli.Context) {
 			util.Log.Warnln("No existen parametros de callback")
 		}
 	} else {
-		fmt.Println("Proceso de deploy con problema")
+		util.Log.Fatalln("Proceso de deploy con problema")
 	}
 }

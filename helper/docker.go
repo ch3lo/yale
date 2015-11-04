@@ -167,13 +167,13 @@ func (dh *DockerHelper) CreateAndRun(containerOpts docker.CreateContainerOptions
 		return nil, err
 	}
 
-	util.Log.Infoln("Starting container", container.Name)
+	util.Log.Infoln("Starting container", container.ID)
 	err = dh.client.StartContainer(container.ID, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	util.Log.Infoln("Pulling container info", container.Name)
+	util.Log.Infoln("Inspecting container", container.Name)
 	container, err = dh.ContainerInspect(container.ID)
 	if err != nil {
 		return nil, err

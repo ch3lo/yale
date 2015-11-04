@@ -32,9 +32,8 @@ func listFlags() []cli.Flag {
 func listCmd(c *cli.Context) {
 	data := [][]string{}
 	stackMap, err := stackManager.SearchContainers(c.String("if"), c.String("cf"))
-
 	if err != nil {
-		util.Log.Errorln(err)
+		util.Log.Fatalln(err)
 	}
 
 	for stackKey, containers := range stackMap {

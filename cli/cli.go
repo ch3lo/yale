@@ -231,6 +231,5 @@ func RunApp() {
 	if err != nil {
 		fmt.Println(err)
 		util.Log.Fatalln(err)
-		panic(err)
 	}
 }
