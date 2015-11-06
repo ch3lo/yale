@@ -42,7 +42,7 @@ func NewStack(stackKey string, stackNofitication chan<- StackStatus, dh *helper.
 	sm.stackNofitication = stackNofitication
 	sm.dockerApiHelper = dh
 
-	sm.serviceIdNotification = make(chan string)
+	sm.serviceIdNotification = make(chan string, 100)
 
 	return sm
 }
