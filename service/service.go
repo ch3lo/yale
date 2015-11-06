@@ -13,21 +13,25 @@ import (
 	"github.com/fsouza/go-dockerclient"
 )
 
-// Flow INIT -> CREATED -> READY/FAILED -> UNDEPLOYED
+// Flow INIT -> CREATED -> SMOKE_READY -> [WARM_READY] -> READY/FAILED -> UNDEPLOYED
 type Status int
 
 const (
-	INIT       Status = 1 + iota // Contenedor configurado pero aun no se crea ni corre
-	CREATED                      // Contenedor creado y corriendo pero aún no verificado
-	READY                        // Contenedor que paso exitoso el despliegue
-	FAILED                       // Contenedor que fallo en el despliegue
-	UNDEPLOYED                   // Contenedor removido
-	LOADED                       // Contanedor cargado desde la API
+	INIT        Status = 1 + iota // Contenedor configurado pero aun no se crea ni corre
+	CREATED                       // Contenedor creado y corriendo pero aún no verificado
+	SMOKE_READY                   // Contenedor ha pasado las pruebas de humo
+	WARM_READY                    // Contenedor ha pasado el calentamiento
+	READY                         // Contenedor que paso exitoso el despliegue
+	FAILED                        // Contenedor que fallo en el despliegue
+	UNDEPLOYED                    // Contenedor removido
+	LOADED                        // Contanedor cargado desde la API
 )
 
 var status = [...]string{
 	"INIT",
 	"CREATED",
+	"SMOKE_READY",
+	"WARM_READY",
 	"READY",
 	"FAILED",
 	"UNDEPLOYED",
@@ -39,12 +43,10 @@ func (s Status) String() string {
 }
 
 type ServiceConfig struct {
-	ImageName      string
-	Tag            string
-	Envs           []string
-	Healthy        string
-	HealthyRetries int
-	Publish        []string
+	ImageName string
+	Tag       string
+	Envs      []string
+	Publish   []string
 }
 
 func (s *ServiceConfig) Version() string {
@@ -57,7 +59,7 @@ func (s *ServiceConfig) Version() string {
 }
 
 func (s *ServiceConfig) String() string {
-	return fmt.Sprintf("ImageName: %s - Tag: %s - Envs - %s - Healthy: %s - HealthyRetries: %d - Publish: %#v", s.ImageName, s.Tag, util.MaskEnv(s.Envs), s.Healthy, s.HealthyRetries, s.Publish)
+	return fmt.Sprintf("ImageName: %s - Tag: %s - Envs - %s - Publish: %#v", s.ImageName, s.Tag, util.MaskEnv(s.Envs), s.Publish)
 }
 
 type DockerService struct {

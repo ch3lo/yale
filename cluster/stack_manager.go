@@ -3,6 +3,7 @@ package cluster
 import (
 	"github.com/Pallinder/go-randomdata"
 	"github.com/ch3lo/yale/helper"
+	"github.com/ch3lo/yale/monitor"
 	"github.com/ch3lo/yale/service"
 	"github.com/ch3lo/yale/util"
 )
@@ -40,7 +41,7 @@ func (sm *StackManager) AppendStack(dh *helper.DockerHelper) {
 	}
 }
 
-func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, instances int, tolerance float64) bool {
+func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, smokeConfig monitor.MonitorConfig, warmConfig monitor.MonitorConfig, instances int, tolerance float64) bool {
 	sm.loadContainers(serviceConfig.ImageName+":"+serviceConfig.Tag, ".*")
 
 	for stackKey, _ := range sm.stacks {
@@ -52,7 +53,7 @@ func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, instances in
 		} else if currentContainers < instances {
 			diff := instances - currentContainers
 			util.PrintfAndLogInfof("Stack %s has %d from %d containers ", stackKey, currentContainers, instances)
-			go sm.stacks[stackKey].DeployCheckAndNotify(serviceConfig, diff, tolerance)
+			go sm.stacks[stackKey].DeployCheckAndNotify(serviceConfig, smokeConfig, warmConfig, diff, tolerance)
 		} else {
 			diff := currentContainers - instances
 			util.PrintfAndLogInfof("Stack %s has more containers than needed (%d from %d), undeploying...", stackKey, currentContainers, instances)

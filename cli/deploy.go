@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/ch3lo/yale/cluster"
+	"github.com/ch3lo/yale/monitor"
 	"github.com/ch3lo/yale/service"
 	"github.com/ch3lo/yale/util"
 	"github.com/codegangsta/cli"
@@ -39,6 +40,19 @@ func deployFlags() []cli.Flag {
 			Name:  "tag",
 			Usage: "TAG de la imagen",
 		},
+		cli.StringSliceFlag{
+			Name:  "port",
+			Value: &cli.StringSlice{"8080"},
+			Usage: "Puerto interno del contenedor a exponer en el Host",
+		},
+		cli.StringSliceFlag{
+			Name:  "env-file",
+			Usage: "Archivo con variables de entorno",
+		},
+		cli.StringSliceFlag{
+			Name:  "env",
+			Usage: "Variables de entorno en formato KEY=VALUE",
+		},
 		cli.IntFlag{
 			Name:  "instances",
 			Value: 1,
@@ -50,23 +64,6 @@ func deployFlags() []cli.Flag {
 			Usage: "Porcentaje de servicios que pueden fallar en el proceso de deploy por cada enpoint entregado." +
 				"Este valor es respecto al total de instancias." +
 				"Por ejemplo, si se despliegan 5 servicios y fallan ",
-		},
-		cli.IntFlag{
-			Name:  "healthy-retries",
-			Value: 10,
-			Usage: "Cantidad de healthy que se realizarán antes de declarar el servicio con fallo de despliegue",
-		},
-		cli.StringFlag{
-			Name:  "healthy-ep",
-			Usage: "Endpoint HTTP donde se debe hacer el healthy check",
-		},
-		cli.StringSliceFlag{
-			Name:  "env-file",
-			Usage: "Archivo con variables de entorno",
-		},
-		cli.StringSliceFlag{
-			Name:  "env",
-			Usage: "Variables de entorno en formato KEY=VALUE",
 		},
 		cli.StringFlag{
 			Name:   "callback-url",
@@ -82,10 +79,30 @@ func deployFlags() []cli.Flag {
 			Name:  "callback-token",
 			Usage: "Token de seguridad que se utilizará en el callback",
 		},
-		cli.StringSliceFlag{
-			Name:  "port",
-			Value: &cli.StringSlice{"8080"},
-			Usage: "Puerto interno del contenedor a exponer en el Host",
+		cli.IntFlag{
+			Name:  "smoke-retries",
+			Value: 10,
+			Usage: "Cantidad de smoke test que se realizarán antes de declarar el servicio con fallo de despliegue",
+		},
+		cli.StringFlag{
+			Name:  "smoke-type",
+			Usage: "Define si el smoke test es TCP o HTTP",
+		},
+		cli.StringFlag{
+			Name:  "smoke-ping",
+			Usage: "Información necesaria para el request",
+		},
+		cli.StringFlag{
+			Name:  "smoke-pong",
+			Usage: "Valor esperado en el smoke test para definir la prueba como exitosa. Es una expresión regular.",
+		},
+		cli.StringFlag{
+			Name:  "warmup-ep",
+			Usage: "Enpoint que se utilizará para hacer el calentamiento del servicio",
+		},
+		cli.StringFlag{
+			Name:  "warmup-expected",
+			Usage: "Valor esperado del resultado del calentamiento. Si se cumple el valor pasado, se asume un calentamiento exitoso",
 		},
 	}
 }
@@ -160,18 +177,30 @@ func deployCmd(c *cli.Context) {
 	}
 
 	serviceConfig := service.ServiceConfig{
-		ImageName:      c.String("image"),
-		Tag:            c.String("tag"),
-		Envs:           envs,
-		Healthy:        c.String("healthy-ep"),
-		HealthyRetries: c.Int("healthy-retries"),
-		Publish:        []string{"8080/tcp"}, // TODO desplegar puertos que no sean 8080
+		ImageName: c.String("image"),
+		Tag:       c.String("tag"),
+		Envs:      envs,
+		Publish:   []string{"8080/tcp"}, // TODO desplegar puertos que no sean 8080
+	}
+
+	smokeConfig := monitor.MonitorConfig{
+		Retries: c.Int("smoke-retries"),
+		Type:    monitor.GetMonitor(c.String("smoke-type")),
+		Ping:    c.String("smoke-ping"),
+		Pong:    ".*",
+	}
+
+	warmUpConfig := monitor.MonitorConfig{
+		Retries: 1,
+		Type:    monitor.HTTP,
+		Ping:    c.String("warmup-ep"),
+		Pong:    ".*",
 	}
 
 	util.Log.Debugf("Service Configuration: %#v", serviceConfig.String())
 
 	handleDeploySigTerm(stackManager)
-	if stackManager.Deploy(serviceConfig, c.Int("instances"), c.Float64("tolerance")) {
+	if stackManager.Deploy(serviceConfig, smokeConfig, warmUpConfig, c.Int("instances"), c.Float64("tolerance")) {
 		fmt.Println("Proceso de deploy ok")
 		services := stackManager.DeployedContainers()
 		var resume []callbackResume

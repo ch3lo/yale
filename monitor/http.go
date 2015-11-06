@@ -23,7 +23,7 @@ func (h *HttpMonitor) Check(addr string) bool {
 
 	try := 1
 	for h.retries == -1 || try <= h.retries {
-		util.Log.Infof("Healthy Check attempt %d/%d", try, h.retries)
+		util.Log.Infof("HTTP Check attempt %d/%d", try, h.retries)
 		resp, err := http.Get(healthyEndpoint)
 		if err == nil {
 			util.Log.Debugf("Response received with status %d", resp.StatusCode)
@@ -64,4 +64,12 @@ func (http *HttpMonitor) SetExpect(ex string) {
 
 func (http *HttpMonitor) SetRetries(retries int) {
 	http.retries = retries
+}
+
+func (http *HttpMonitor) Configured() bool {
+	if http.endpoint != "" && http.retries != 0 {
+		return true
+	}
+
+	return false
 }
