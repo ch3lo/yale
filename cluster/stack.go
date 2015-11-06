@@ -163,7 +163,7 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 		} else if dockerService.Status == service.SMOKE_READY {
 			util.Log.Debugf("Service %s smoke test ready", dockerService.GetId())
 			go s.warmUp(dockerService)
-		} else if dockerService.Status == service.SMOKE_READY {
+		} else if dockerService.Status == service.WARM_READY {
 			util.Log.Debugf("Service %s warm up ready", dockerService.GetId())
 			dockerService.SetStatus(service.READY)
 		} else if dockerService.Status == service.READY {
@@ -225,6 +225,7 @@ func (s *Stack) warmUp(ds *service.DockerService) {
 	if !s.warmUpMonitor.Configured() {
 		util.Log.Infof("Service %s, doesn't have Warm Up. Skiping", ds.GetId())
 		fmt.Printf("Service %s, doesn't have Warm Up. Skiping", ds.GetId())
+		ds.SetStatus(service.WARM_READY)
 		return
 	}
 
