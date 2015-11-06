@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/Pallinder/go-randomdata"
+	log "github.com/Sirupsen/logrus"
 	"github.com/ch3lo/yale/helper"
 	"github.com/ch3lo/yale/util"
 	"github.com/fsouza/go-dockerclient"
@@ -68,6 +69,7 @@ type DockerService struct {
 	statusChannel   chan<- string
 	dockerApihelper *helper.DockerHelper
 	container       *docker.Container
+	log             *log.Entry
 }
 
 func NewDockerService(prefixId string, dh *helper.DockerHelper, sc chan<- string) *DockerService {
@@ -77,7 +79,11 @@ func NewDockerService(prefixId string, dh *helper.DockerHelper, sc chan<- string
 	ds.Status = INIT
 	ds.statusChannel = sc
 
-	util.Log.Infof("Setting Up Service %s", ds.Id)
+	ds.log = util.Log.WithFields(log.Fields{
+		"ds": ds.Id,
+	})
+
+	ds.log.Infof("Setting Up Service")
 
 	return ds
 }
@@ -112,13 +118,13 @@ func (ds *DockerService) bindPort(publish []string) map[docker.Port][]docker.Por
 	portBindings := map[docker.Port][]docker.PortBinding{}
 
 	for _, v := range publish {
-		util.Log.Debugln("Processing Port", v)
+		ds.log.Debugln("Processing Port", v)
 		var dp docker.Port
 		reflect.ValueOf(&dp).Elem().SetString(v)
 		portBindings[dp] = []docker.PortBinding{docker.PortBinding{}}
 	}
 
-	util.Log.Debugf("PortBindings %#v", portBindings)
+	ds.log.Debugf("PortBindings %#v", portBindings)
 
 	return portBindings
 }
@@ -149,13 +155,13 @@ func (ds *DockerService) Run(serviceConfig ServiceConfig) {
 	ds.container, err = ds.dockerCli().CreateAndRun(opts)
 
 	if err != nil {
-		util.Log.Errorf("Run error: %s", err)
+		ds.log.Errorf("Run error: %s", err)
 		fmt.Printf("Container Run with error: %s", err)
 		ds.SetStatus(FAILED)
 		return
 	}
 
-	util.Log.Debugf("Service with ID %s has Registrator ID %s", ds.GetId(), ds.RegistratorId())
+	ds.log.Debugf("Service Registrator ID %s", ds.RegistratorId())
 
 	ds.SetStatus(CREATED)
 }
@@ -164,10 +170,10 @@ func (ds *DockerService) Undeploy() {
 	if ds.container != nil && ds.container.ID != "" {
 		err := ds.dockerCli().UndeployContainer(ds.container.ID, true, 10)
 		if err != nil {
-			util.Log.Errorln("No se pudo remover el contenedor", err)
+			ds.log.Errorln("No se pudo remover el contenedor", err)
 		}
 	} else {
-		util.Log.Warnf("Container Instance not found %s", ds.Id)
+		ds.log.Warnf("Container Instance not found %s", ds.Id)
 	}
 }
 
@@ -194,9 +200,9 @@ func (ds *DockerService) ContainerStatus() string {
 
 func (ds *DockerService) PublicPorts() map[int64]int64 {
 	ports := make(map[int64]int64)
-	util.Log.Debugf("Api Ports %#v", ds.container.NetworkSettings.PortMappingAPI())
+	ds.log.Debugf("Api Ports %#v", ds.container.NetworkSettings.PortMappingAPI())
 	for _, val := range ds.container.NetworkSettings.PortMappingAPI() {
-		util.Log.Debugf("Private Port [%d] Public Port [%d]", val.PrivatePort, val.PublicPort)
+		ds.log.Debugf("Private Port [%d] Public Port [%d]", val.PrivatePort, val.PublicPort)
 		if val.PrivatePort != 0 && val.PublicPort != 0 {
 			ports[val.PrivatePort] = val.PublicPort
 		}
@@ -207,12 +213,12 @@ func (ds *DockerService) PublicPorts() map[int64]int64 {
 
 func (ds *DockerService) AddressAndPort(internalPort int64) (string, error) {
 
-	util.Log.Debugf("Api Ports %#v", ds.container.NetworkSettings.PortMappingAPI())
+	ds.log.Debugf("Api Ports %#v", ds.container.NetworkSettings.PortMappingAPI())
 	for _, val := range ds.container.NetworkSettings.PortMappingAPI() {
-		util.Log.Debugln("Private Port", val.PrivatePort, "Public Port", val.PublicPort)
+		ds.log.Debugln("Private Port", val.PrivatePort, "Public Port", val.PublicPort)
 		if val.PrivatePort == internalPort {
 			addr := val.IP + ":" + strconv.FormatInt(val.PublicPort, 10)
-			util.Log.Debugf("Calculated Addr %s", addr)
+			ds.log.Debugf("Calculated Addr %s", addr)
 			return addr, nil
 		}
 	}

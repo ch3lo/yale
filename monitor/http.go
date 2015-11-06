@@ -29,7 +29,7 @@ func (h *HttpMonitor) Check(addr string) bool {
 			util.Log.Debugf("Response received with status %d", resp.StatusCode)
 
 			if resp.StatusCode == 200 {
-				util.Log.Infoln("Checking response ...")
+				util.Log.Debugln("Checking response ...")
 				body, _ := ioutil.ReadAll(resp.Body)
 
 				result := false

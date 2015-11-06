@@ -3,7 +3,7 @@ package cluster
 import (
 	"fmt"
 
-	"github.com/Pallinder/go-randomdata"
+	log "github.com/Sirupsen/logrus"
 	"github.com/ch3lo/yale/helper"
 	"github.com/ch3lo/yale/monitor"
 	"github.com/ch3lo/yale/service"
@@ -34,23 +34,27 @@ type Stack struct {
 	stackNofitication     chan<- StackStatus
 	smokeTestMonitor      monitor.Monitor
 	warmUpMonitor         monitor.Monitor
+	log                   *log.Entry
 }
 
 func NewStack(stackKey string, stackNofitication chan<- StackStatus, dh *helper.DockerHelper) *Stack {
-	sm := new(Stack)
-	sm.id = stackKey + "_" + randomdata.Country(randomdata.TwoCharCountry)
-	sm.stackNofitication = stackNofitication
-	sm.dockerApiHelper = dh
+	s := new(Stack)
+	s.id = stackKey
+	s.stackNofitication = stackNofitication
+	s.dockerApiHelper = dh
+	s.serviceIdNotification = make(chan string, 100)
 
-	sm.serviceIdNotification = make(chan string, 100)
+	s.log = util.Log.WithFields(log.Fields{
+		"stack": stackKey,
+	})
 
-	return sm
+	return s
 }
 
-func createMonitor(config monitor.MonitorConfig) monitor.Monitor {
+func (s *Stack) createMonitor(config monitor.MonitorConfig) monitor.Monitor {
 	var mon monitor.Monitor
 
-	util.Log.Infof("Creating monitor with: mode=%s and ping=%s", config.Type, config.Ping)
+	s.log.Infof("Creating monitor with: mode=%s and ping=%s", config.Type, config.Ping)
 	if config.Type == monitor.TCP {
 		mon = new(monitor.TcpMonitor)
 	} else {
@@ -65,11 +69,11 @@ func createMonitor(config monitor.MonitorConfig) monitor.Monitor {
 }
 
 func (s *Stack) DeployCheckAndNotify(serviceConfig service.ServiceConfig, smokeConfig monitor.MonitorConfig, warmConfig monitor.MonitorConfig, instances int, tolerance float64) {
-	s.smokeTestMonitor = createMonitor(smokeConfig)
-	s.warmUpMonitor = createMonitor(warmConfig)
+	s.smokeTestMonitor = s.createMonitor(smokeConfig)
+	s.warmUpMonitor = s.createMonitor(warmConfig)
 
 	for i := 1; i <= instances; i++ {
-		util.Log.Debugf("Deploying instance number %d in stack %s", i, s.id)
+		s.log.Debugf("Deploying instance number %d", i)
 		s.deployOneInstance(serviceConfig)
 	}
 
@@ -93,13 +97,15 @@ func (s *Stack) deployOneInstance(serviceConfig service.ServiceConfig) {
 	dockerService := service.NewDockerService(s.id, s.dockerApiHelper, s.serviceIdNotification)
 	s.addNewService(dockerService)
 
-	util.PrintfAndLogInfof("Deploying Service with ID %s in background", dockerService.GetId())
+	s.log.Infof("Deploying Service with ID %s in background", dockerService.GetId())
+	fmt.Printf("Deploying Service with ID %s in background", dockerService.GetId())
 	go dockerService.Run(serviceConfig)
 }
 
 func (s *Stack) undeployInstance(serviceId string) {
 	dockerService := s.getService(serviceId)
-	util.PrintfAndLogInfof("Undeploying Service %s", serviceId)
+	s.log.Infof("Undeploying Service %s", serviceId)
+	fmt.Printf("Undeploying Service %s", serviceId)
 	dockerService.Undeploy()
 }
 
@@ -148,37 +154,38 @@ func (s *Stack) countServicesWithStatus(status service.Status) int {
 
 func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstances int, tolerance float64) bool {
 	for {
-		util.Log.Infoln("Waiting for signal")
+		s.log.Infoln("Waiting for signal")
 		serviceId := <-s.serviceIdNotification
-		util.Log.Infoln("Signal received from", serviceId)
+		s.log.Infoln("Signal received from", serviceId)
 
 		dockerService := s.getService(serviceId) // que pasa si dockerService es nil?
-		util.PrintfAndLogInfof("Service %s with status %s", serviceId, dockerService.Status)
+		s.log.Infof("Service %s with status %s", serviceId, dockerService.Status)
+		fmt.Printf("Service %s with status %s", serviceId, dockerService.Status)
 
 		okInstances := s.countServicesWithStatus(service.READY)
 
 		if dockerService.Status == service.CREATED {
-			util.Log.Debugf("Service %s created, checking healthy", dockerService.GetId())
+			s.log.Debugf("Service %s created, checking healthy", dockerService.GetId())
 			go s.smokeTest(dockerService)
 		} else if dockerService.Status == service.SMOKE_READY {
-			util.Log.Debugf("Service %s smoke test ready", dockerService.GetId())
+			s.log.Debugf("Service %s smoke test ready", dockerService.GetId())
 			go s.warmUp(dockerService)
 		} else if dockerService.Status == service.WARM_READY {
-			util.Log.Debugf("Service %s warm up ready", dockerService.GetId())
+			s.log.Debugf("Service %s warm up ready", dockerService.GetId())
 			dockerService.SetStatus(service.READY)
 		} else if dockerService.Status == service.READY {
-			util.Log.Debugf("Service %s ready", dockerService.GetId())
+			s.log.Debugf("Service %s ready", dockerService.GetId())
 		} else if dockerService.Status == service.FAILED {
-			util.Log.Debugf("Service %s failed", dockerService.GetId())
+			s.log.Debugf("Service %s failed", dockerService.GetId())
 			s.undeployInstance(dockerService.GetId())
 
 			failedInstances := s.countServicesWithStatus(service.FAILED)
 
 			maxFailedServices := float64(totalInstances) * tolerance
-			util.Log.Debugf("Failed Services %f", float64(failedInstances))
-			util.Log.Debugf("Fail Tolerance %f", maxFailedServices)
+			s.log.Debugf("Failed Services %f", float64(failedInstances))
+			s.log.Debugf("Fail Tolerance %f", maxFailedServices)
 			if float64(failedInstances) < maxFailedServices {
-				util.Log.Debugf("Accepted Tolerance")
+				s.log.Debugf("Accepted Tolerance")
 				s.deployOneInstance(serviceConfig)
 			} else {
 				fmt.Printf("Services resume: success %d - failed %d - total %d (tolerance %f)\n", okInstances, failedInstances, totalInstances, tolerance)
@@ -186,7 +193,8 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 			}
 		}
 
-		util.PrintfAndLogInfof("Services resume %d/%d", okInstances, totalInstances)
+		s.log.Infof("Services resume %d/%d", okInstances, totalInstances)
+		fmt.Printf("Services resume %d/%d", okInstances, totalInstances)
 		if okInstances == totalInstances {
 			return true
 		}
@@ -212,7 +220,7 @@ func (s *Stack) smokeTest(ds *service.DockerService) {
 
 	result := s.smokeTestMonitor.Check(addr)
 
-	util.Log.Infof("Service %s, Smoke Test status %t", ds.GetId(), result)
+	s.log.Infof("Service %s, Smoke Test status %t", ds.GetId(), result)
 
 	if result {
 		ds.SetStatus(service.SMOKE_READY)
@@ -223,7 +231,7 @@ func (s *Stack) smokeTest(ds *service.DockerService) {
 
 func (s *Stack) warmUp(ds *service.DockerService) {
 	if !s.warmUpMonitor.Configured() {
-		util.Log.Infof("Service %s, doesn't have Warm Up. Skiping", ds.GetId())
+		s.log.Infof("Service %s, doesn't have Warm Up. Skiping", ds.GetId())
 		fmt.Printf("Service %s, doesn't have Warm Up. Skiping", ds.GetId())
 		ds.SetStatus(service.WARM_READY)
 		return
@@ -241,7 +249,7 @@ func (s *Stack) warmUp(ds *service.DockerService) {
 
 	result := s.warmUpMonitor.Check(addr)
 
-	util.Log.Infof("Service %s, Warm Up status %t", ds.GetId(), result)
+	s.log.Infof("Service %s, Warm Up status %t", ds.GetId(), result)
 
 	if result {
 		ds.SetStatus(service.WARM_READY)
