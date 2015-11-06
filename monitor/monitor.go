@@ -1,5 +1,9 @@
 package monitor
 
+import (
+	"strings"
+)
+
 type MonitorType int
 
 const (
@@ -17,7 +21,7 @@ func (s MonitorType) String() string {
 }
 
 func GetMonitor(t string) MonitorType {
-	if t == TCP.String() {
+	if strings.ToUpper(t) == TCP.String() {
 		return TCP
 	}
 

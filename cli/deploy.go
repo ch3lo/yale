@@ -86,6 +86,7 @@ func deployFlags() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:  "smoke-type",
+			Value: "http",
 			Usage: "Define si el smoke test es TCP o HTTP",
 		},
 		cli.StringFlag{
@@ -93,15 +94,17 @@ func deployFlags() []cli.Flag {
 			Usage: "Información necesaria para el request",
 		},
 		cli.StringFlag{
-			Name:  "smoke-pong",
+			Name:  "smoke-expected",
+			Value: ".*",
 			Usage: "Valor esperado en el smoke test para definir la prueba como exitosa. Es una expresión regular.",
 		},
 		cli.StringFlag{
-			Name:  "warmup-ep",
+			Name:  "warmup-ping",
 			Usage: "Enpoint que se utilizará para hacer el calentamiento del servicio",
 		},
 		cli.StringFlag{
 			Name:  "warmup-expected",
+			Value: ".*",
 			Usage: "Valor esperado del resultado del calentamiento. Si se cumple el valor pasado, se asume un calentamiento exitoso",
 		},
 	}
@@ -116,8 +119,8 @@ func deployBefore(c *cli.Context) error {
 		return errors.New("El TAG de la imagen esta vacio")
 	}
 
-	if c.String("healthy-ep") == "" {
-		return errors.New("El endpoint de healthy check esta vacio")
+	if c.String("smoke-ping") == "" {
+		return errors.New("El endpoint de Smoke Test esta vacio")
 	}
 
 	for _, file := range c.StringSlice("env-file") {
@@ -187,14 +190,14 @@ func deployCmd(c *cli.Context) {
 		Retries: c.Int("smoke-retries"),
 		Type:    monitor.GetMonitor(c.String("smoke-type")),
 		Ping:    c.String("smoke-ping"),
-		Pong:    ".*",
+		Pong:    c.String("smoke-expected"),
 	}
 
 	warmUpConfig := monitor.MonitorConfig{
 		Retries: 1,
 		Type:    monitor.HTTP,
-		Ping:    c.String("warmup-ep"),
-		Pong:    ".*",
+		Ping:    c.String("warmup-ping"),
+		Pong:    c.String("warmup-expected"),
 	}
 
 	util.Log.Debugf("Service Configuration: %#v", serviceConfig.String())
