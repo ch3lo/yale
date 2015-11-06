@@ -173,7 +173,7 @@ func (ds *DockerService) Undeploy() {
 			ds.log.Errorln("No se pudo remover el contenedor", err)
 		}
 	} else {
-		ds.log.Warnf("Container Instance not found %s", ds.Id)
+		ds.log.Warnf("Container Instance not found")
 	}
 }
 

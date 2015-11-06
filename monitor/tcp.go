@@ -29,7 +29,7 @@ func (tcp *TcpMonitor) Check(addr string) bool {
 		}
 
 		try++
-		time.Sleep(2 * 1e9)
+		time.Sleep(10 * 1e9)
 	}
 
 	return false
