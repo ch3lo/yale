@@ -74,7 +74,7 @@ func (s *Stack) DeployCheckAndNotify(serviceConfig service.ServiceConfig, smokeC
 	if currentContainers == instances {
 		s.log.Infoln("Stack was deployed")
 		fmt.Println("Stack was deployed")
-		s.SetStatus(STACK_READY)
+		s.setStatus(STACK_READY)
 	} else if currentContainers < instances {
 		s.smokeTestMonitor = s.createMonitor(smokeConfig)
 		s.warmUpMonitor = s.createMonitor(warmConfig)
@@ -85,21 +85,21 @@ func (s *Stack) DeployCheckAndNotify(serviceConfig service.ServiceConfig, smokeC
 		}
 
 		if s.checkInstances(serviceConfig, instances, tolerance) {
-			s.SetStatus(STACK_READY)
+			s.setStatus(STACK_READY)
 			return
 		}
 
-		s.SetStatus(STACK_FAILED)
+		s.setStatus(STACK_FAILED)
 	} else {
 		diff := currentContainers - instances
 		s.log.Printf("Stack has more containers than needed (%d from %d), undeploying...", currentContainers, instances)
 		fmt.Printf("Stack has more containers than needed (%d from %d), undeploying...", currentContainers, instances)
 		s.UndeployInstances(diff)
-		s.SetStatus(STACK_READY)
+		s.setStatus(STACK_READY)
 	}
 }
 
-func (s *Stack) SetStatus(status StackStatus) {
+func (s *Stack) setStatus(status StackStatus) {
 	s.stackNofitication <- status
 }
 
