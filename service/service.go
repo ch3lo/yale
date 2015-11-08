@@ -15,17 +15,25 @@ import (
 	"github.com/fsouza/go-dockerclient"
 )
 
-// Flow INIT -> CREATED -> SMOKE_READY -> READY/FAILED -> UNDEPLOYED
+// Flow LOADED -> [UNDEPLOYED]
+// Flow INIT -> CREATED -> SMOKE_READY -> READY/FAILED -> [UNDEPLOYED]
+//	INIT        Contenedor configurado pero aun no se crea ni corre
+//	CREATED     Contenedor creado y corriendo pero aún no verificado
+//	SMOKE_READY Contenedor ha pasado las pruebas de humo
+//	READY       Contenedor que paso exitoso el despliegue
+//	FAILED      Contenedor que fallo en el despliegue
+//	UNDEPLOYED  Contenedor removido
+//	LOADED      Contanedor cargado desde la API
 type Status int
 
 const (
-	INIT        Status = 1 + iota // Contenedor configurado pero aun no se crea ni corre
-	CREATED                       // Contenedor creado y corriendo pero aún no verificado
-	SMOKE_READY                   // Contenedor ha pasado las pruebas de humo
-	READY                         // Contenedor que paso exitoso el despliegue
-	FAILED                        // Contenedor que fallo en el despliegue
-	UNDEPLOYED                    // Contenedor removido
-	LOADED                        // Contanedor cargado desde la API
+	INIT Status = 1 + iota
+	CREATED
+	SMOKE_READY
+	READY
+	FAILED
+	UNDEPLOYED
+	LOADED
 )
 
 var status = [...]string{
@@ -170,14 +178,22 @@ func (ds *DockerService) Run(serviceConfig ServiceConfig) {
 }
 
 func (ds *DockerService) Undeploy() {
-	if ds.container != nil && ds.container.ID != "" {
-		err := ds.dockerCli().UndeployContainer(ds.container.ID, true, 10)
-		if err != nil {
-			ds.log.Errorln("No se pudo remover el contenedor", err)
-		}
-	} else {
-		ds.log.Warnf("Container Instance not found")
+	if ds.GetStatus() == UNDEPLOYED {
+		ds.log.Infoln("Service was undeployed")
+		return
 	}
+
+	if ds.container == nil || ds.container.ID == "" {
+		ds.log.Warnf("Container Instance not found")
+		return
+	}
+
+	err := ds.dockerCli().UndeployContainer(ds.container.ID, true, 10)
+	if err != nil {
+		ds.log.Errorln("No se pudo remover el contenedor", err)
+		return
+	}
+	ds.setStatus(UNDEPLOYED)
 }
 
 func (ds *DockerService) ContainerName() string {
