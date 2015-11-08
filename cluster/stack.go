@@ -125,7 +125,7 @@ func (s *Stack) undeployInstance(serviceId string) {
 
 func (s *Stack) Rollback() {
 	for _, srv := range s.services {
-		if srv.Status != service.LOADED {
+		if srv.GetStatus() != service.LOADED {
 			s.undeployInstance(srv.GetId())
 		}
 	}
@@ -155,7 +155,7 @@ func (s *Stack) getService(serviceId string) *service.DockerService {
 func (s *Stack) ServicesWithStatus(status service.Status) []*service.DockerService {
 	var services []*service.DockerService
 	for k, v := range s.services {
-		if v.Status == status {
+		if v.GetStatus() == status {
 			services = append(services, s.services[k])
 		}
 	}
@@ -173,20 +173,20 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 		s.log.Infoln("Signal received from", serviceId)
 
 		dockerService := s.getService(serviceId) // que pasa si dockerService es nil?
-		s.log.Infof("Service %s with status %s", serviceId, dockerService.Status)
-		fmt.Printf("Service %s with status %s", serviceId, dockerService.Status)
+		s.log.Infof("Service %s with status %s", serviceId, dockerService.GetStatus())
+		fmt.Printf("Service %s with status %s", serviceId, dockerService.GetStatus())
 
 		okInstances := s.countServicesWithStatus(service.READY)
 
-		if dockerService.Status == service.CREATED {
+		if dockerService.GetStatus() == service.CREATED {
 			s.log.Debugf("Service %s created, checking healthy", dockerService.GetId())
 			go dockerService.RunSmokeTest(s.smokeTestMonitor)
-		} else if dockerService.Status == service.SMOKE_READY {
+		} else if dockerService.GetStatus() == service.SMOKE_READY {
 			s.log.Debugf("Service %s smoke test ready", dockerService.GetId())
 			go dockerService.RunWarmUp(s.warmUpMonitor)
-		} else if dockerService.Status == service.READY {
+		} else if dockerService.GetStatus() == service.READY {
 			s.log.Debugf("Service %s ready", dockerService.GetId())
-		} else if dockerService.Status == service.FAILED {
+		} else if dockerService.GetStatus() == service.FAILED {
 			s.log.Debugf("Service %s failed", dockerService.GetId())
 			s.undeployInstance(dockerService.GetId())
 
@@ -220,7 +220,7 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 
 func (s *Stack) LoadContainers(imageNameFilter string, containerNameFilter string) error {
 	filter := helper.NewContainerFilter()
-	//filter.Status = []string{"running"}
+	//filter.GetStatus() = []string{"running"}
 	filter.ImageRegexp = imageNameFilter
 	filter.NameRegexp = containerNameFilter
 

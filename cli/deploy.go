@@ -212,7 +212,7 @@ func deployCmd(c *cli.Context) {
 			if addr, err := services[k].AddressAndPort(8080); err != nil {
 				util.Log.Errorln(err)
 			} else {
-				util.PrintfAndLogInfof("Deployed %s with registrator tag %s , addr %s", services[k].Id, services[k].RegistratorId(), addr)
+				util.PrintfAndLogInfof("Deployed %s with registrator tag %s , addr %s", services[k].GetId(), services[k].RegistratorId(), addr)
 				containerInfo := callbackResume{
 					RegisterId: services[k].RegistratorId(),
 					Address:    addr,

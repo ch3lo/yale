@@ -63,8 +63,8 @@ func (s *ServiceConfig) String() string {
 }
 
 type DockerService struct {
-	Id              string
-	Status          Status
+	id              string
+	status          Status
 	statusChannel   chan<- string
 	dockerApihelper *helper.DockerHelper
 	container       *docker.Container
@@ -73,13 +73,13 @@ type DockerService struct {
 
 func NewDockerService(prefixId string, dh *helper.DockerHelper, sc chan<- string) *DockerService {
 	ds := new(DockerService)
-	ds.Id = prefixId + "_" + randomdata.SillyName()
+	ds.id = prefixId + "_" + randomdata.SillyName()
 	ds.dockerApihelper = dh
-	ds.Status = INIT
+	ds.status = INIT
 	ds.statusChannel = sc
 
 	ds.log = util.Log.WithFields(log.Fields{
-		"ds": ds.Id,
+		"ds": ds.id,
 	})
 
 	ds.log.Infof("Setting Up Service")
@@ -90,13 +90,13 @@ func NewDockerService(prefixId string, dh *helper.DockerHelper, sc chan<- string
 func NewFromContainer(prefixId string, dh *helper.DockerHelper, container *docker.Container, sc chan<- string) *DockerService {
 	ds := NewDockerService(prefixId, dh, sc)
 	ds.container = container
-	ds.Status = LOADED
+	ds.status = LOADED
 
 	return ds
 }
 
 func (ds *DockerService) GetId() string {
-	return ds.Id
+	return ds.id
 }
 
 func (ds *DockerService) RegistratorId() string {
@@ -106,7 +106,7 @@ func (ds *DockerService) RegistratorId() string {
 func (ds *DockerService) dockerCli() *helper.DockerHelper {
 	dh := ds.dockerApihelper
 	if dh == nil {
-		ds.SetStatus(FAILED)
+		ds.setStatus(FAILED)
 		return nil
 	}
 
@@ -128,9 +128,13 @@ func (ds *DockerService) bindPort(publish []string) map[docker.Port][]docker.Por
 	return portBindings
 }
 
-func (ds *DockerService) SetStatus(status Status) {
-	ds.Status = status
-	ds.statusChannel <- ds.Id
+func (ds *DockerService) setStatus(status Status) {
+	ds.status = status
+	ds.statusChannel <- ds.id
+}
+
+func (ds *DockerService) GetStatus() Status {
+	return ds.status
 }
 
 func (ds *DockerService) Run(serviceConfig ServiceConfig) {
@@ -156,13 +160,13 @@ func (ds *DockerService) Run(serviceConfig ServiceConfig) {
 	if err != nil {
 		ds.log.Errorf("Run error: %s", err)
 		fmt.Printf("Container Run with error: %s", err)
-		ds.SetStatus(FAILED)
+		ds.setStatus(FAILED)
 		return
 	}
 
 	ds.log.Debugf("Service Registrator ID %s", ds.RegistratorId())
 
-	ds.SetStatus(CREATED)
+	ds.setStatus(CREATED)
 }
 
 func (ds *DockerService) Undeploy() {
@@ -185,16 +189,21 @@ func (ds *DockerService) ContainerImageName() string {
 }
 
 func (ds *DockerService) ContainerSwarmNode() string {
-
 	if ds.container.Node == nil {
 		return ""
 	}
-
 	return ds.container.Node.Name
 }
 
-func (ds *DockerService) ContainerStatus() string {
+func (ds *DockerService) ContainerState() string {
 	return ds.container.State.String()
+}
+
+func (ds *DockerService) Running() bool {
+	if ds.container.State.Running && !ds.container.State.Paused {
+		return true
+	}
+	return false
 }
 
 func (ds *DockerService) PublicPorts() map[int64]int64 {
@@ -232,7 +241,7 @@ func (ds *DockerService) RunSmokeTest(monitor monitor.Monitor) {
 	// TODO check a puertos que no sean 8080
 	addr, err = ds.AddressAndPort(8080)
 	if err != nil {
-		ds.SetStatus(FAILED)
+		ds.setStatus(FAILED)
 		return
 	}
 
@@ -241,9 +250,9 @@ func (ds *DockerService) RunSmokeTest(monitor monitor.Monitor) {
 	ds.log.Infof("Smoke Test status %t", result)
 
 	if result {
-		ds.SetStatus(SMOKE_READY)
+		ds.setStatus(SMOKE_READY)
 	} else {
-		ds.SetStatus(FAILED)
+		ds.setStatus(FAILED)
 	}
 }
 
@@ -251,7 +260,7 @@ func (ds *DockerService) RunWarmUp(monitor monitor.Monitor) {
 	if !monitor.Configured() {
 		ds.log.Infoln("Service, doesn't have Warm Up. Skiping")
 		fmt.Println("Service, doesn't have Warm Up. Skiping")
-		ds.SetStatus(READY)
+		ds.setStatus(READY)
 		return
 	}
 
@@ -261,7 +270,7 @@ func (ds *DockerService) RunWarmUp(monitor monitor.Monitor) {
 	// TODO check a puertos que no sean 8080
 	addr, err = ds.AddressAndPort(8080)
 	if err != nil {
-		ds.SetStatus(FAILED)
+		ds.setStatus(FAILED)
 		return
 	}
 
@@ -270,8 +279,8 @@ func (ds *DockerService) RunWarmUp(monitor monitor.Monitor) {
 	ds.log.Infof("Warm Up status %t", result)
 
 	if result {
-		ds.SetStatus(READY)
+		ds.setStatus(READY)
 	} else {
-		ds.SetStatus(FAILED)
+		ds.setStatus(FAILED)
 	}
 }
