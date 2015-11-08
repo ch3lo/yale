@@ -10,18 +10,18 @@ import (
 	"github.com/Pallinder/go-randomdata"
 	log "github.com/Sirupsen/logrus"
 	"github.com/ch3lo/yale/helper"
+	"github.com/ch3lo/yale/monitor"
 	"github.com/ch3lo/yale/util"
 	"github.com/fsouza/go-dockerclient"
 )
 
-// Flow INIT -> CREATED -> SMOKE_READY -> [WARM_READY] -> READY/FAILED -> UNDEPLOYED
+// Flow INIT -> CREATED -> SMOKE_READY -> READY/FAILED -> UNDEPLOYED
 type Status int
 
 const (
 	INIT        Status = 1 + iota // Contenedor configurado pero aun no se crea ni corre
 	CREATED                       // Contenedor creado y corriendo pero aún no verificado
 	SMOKE_READY                   // Contenedor ha pasado las pruebas de humo
-	WARM_READY                    // Contenedor ha pasado el calentamiento
 	READY                         // Contenedor que paso exitoso el despliegue
 	FAILED                        // Contenedor que fallo en el despliegue
 	UNDEPLOYED                    // Contenedor removido
@@ -32,7 +32,6 @@ var status = [...]string{
 	"INIT",
 	"CREATED",
 	"SMOKE_READY",
-	"WARM_READY",
 	"READY",
 	"FAILED",
 	"UNDEPLOYED",
@@ -224,4 +223,55 @@ func (ds *DockerService) AddressAndPort(internalPort int64) (string, error) {
 	}
 
 	return "", errors.New(fmt.Sprintf("Unknown port %d", internalPort))
+}
+
+func (ds *DockerService) RunSmokeTest(monitor monitor.Monitor) {
+	var err error
+	var addr string
+
+	// TODO check a puertos que no sean 8080
+	addr, err = ds.AddressAndPort(8080)
+	if err != nil {
+		ds.SetStatus(FAILED)
+		return
+	}
+
+	result := monitor.Check(addr)
+
+	ds.log.Infof("Smoke Test status %t", result)
+
+	if result {
+		ds.SetStatus(SMOKE_READY)
+	} else {
+		ds.SetStatus(FAILED)
+	}
+}
+
+func (ds *DockerService) RunWarmUp(monitor monitor.Monitor) {
+	if !monitor.Configured() {
+		ds.log.Infoln("Service, doesn't have Warm Up. Skiping")
+		fmt.Println("Service, doesn't have Warm Up. Skiping")
+		ds.SetStatus(READY)
+		return
+	}
+
+	var err error
+	var addr string
+
+	// TODO check a puertos que no sean 8080
+	addr, err = ds.AddressAndPort(8080)
+	if err != nil {
+		ds.SetStatus(FAILED)
+		return
+	}
+
+	result := monitor.Check(addr)
+
+	ds.log.Infof("Warm Up status %t", result)
+
+	if result {
+		ds.SetStatus(READY)
+	} else {
+		ds.SetStatus(FAILED)
+	}
 }

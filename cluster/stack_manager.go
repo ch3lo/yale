@@ -45,21 +45,7 @@ func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, smokeConfig 
 	sm.loadContainers(serviceConfig.ImageName+":"+serviceConfig.Tag, ".*")
 
 	for stackKey, _ := range sm.stacks {
-		currentContainers := sm.stacks[stackKey].countServicesWithStatus(service.LOADED)
-
-		if currentContainers == instances {
-			util.PrintfAndLogInfof("Stack %s was deployed", stackKey)
-			sm.stacks[stackKey].SetStatus(STACK_READY)
-		} else if currentContainers < instances {
-			diff := instances - currentContainers
-			util.PrintfAndLogInfof("Stack %s has %d from %d containers ", stackKey, currentContainers, instances)
-			go sm.stacks[stackKey].DeployCheckAndNotify(serviceConfig, smokeConfig, warmConfig, diff, tolerance)
-		} else {
-			diff := currentContainers - instances
-			util.PrintfAndLogInfof("Stack %s has more containers than needed (%d from %d), undeploying...", stackKey, currentContainers, instances)
-			sm.stacks[stackKey].UndeployInstances(diff)
-			sm.stacks[stackKey].SetStatus(STACK_READY)
-		}
+		go sm.stacks[stackKey].DeployCheckAndNotify(serviceConfig, smokeConfig, warmConfig, instances, tolerance)
 	}
 
 	for i := 0; i < len(sm.stacks); i++ {

@@ -42,7 +42,7 @@ func NewStack(stackKey string, stackNofitication chan<- StackStatus, dh *helper.
 	s.id = stackKey
 	s.stackNofitication = stackNofitication
 	s.dockerApiHelper = dh
-	s.serviceIdNotification = make(chan string, 100)
+	s.serviceIdNotification = make(chan string, 1000)
 
 	s.log = util.Log.WithFields(log.Fields{
 		"stack": stackKey,
@@ -69,20 +69,34 @@ func (s *Stack) createMonitor(config monitor.MonitorConfig) monitor.Monitor {
 }
 
 func (s *Stack) DeployCheckAndNotify(serviceConfig service.ServiceConfig, smokeConfig monitor.MonitorConfig, warmConfig monitor.MonitorConfig, instances int, tolerance float64) {
-	s.smokeTestMonitor = s.createMonitor(smokeConfig)
-	s.warmUpMonitor = s.createMonitor(warmConfig)
+	currentContainers := s.countServicesWithStatus(service.LOADED)
 
-	for i := 1; i <= instances; i++ {
-		s.log.Debugf("Deploying instance number %d", i)
-		s.deployOneInstance(serviceConfig)
-	}
-
-	if s.checkInstances(serviceConfig, instances, tolerance) {
+	if currentContainers == instances {
+		s.log.Infoln("Stack was deployed")
+		fmt.Println("Stack was deployed")
 		s.SetStatus(STACK_READY)
-		return
-	}
+	} else if currentContainers < instances {
+		s.smokeTestMonitor = s.createMonitor(smokeConfig)
+		s.warmUpMonitor = s.createMonitor(warmConfig)
 
-	s.SetStatus(STACK_FAILED)
+		for i := 1; i <= instances; i++ {
+			s.log.Debugf("Deploying instance number %d", i)
+			s.deployOneInstance(serviceConfig)
+		}
+
+		if s.checkInstances(serviceConfig, instances, tolerance) {
+			s.SetStatus(STACK_READY)
+			return
+		}
+
+		s.SetStatus(STACK_FAILED)
+	} else {
+		diff := currentContainers - instances
+		s.log.Printf("Stack has more containers than needed (%d from %d), undeploying...", currentContainers, instances)
+		fmt.Printf("Stack has more containers than needed (%d from %d), undeploying...", currentContainers, instances)
+		s.UndeployInstances(diff)
+		s.SetStatus(STACK_READY)
+	}
 }
 
 func (s *Stack) SetStatus(status StackStatus) {
@@ -99,7 +113,7 @@ func (s *Stack) deployOneInstance(serviceConfig service.ServiceConfig) {
 
 	s.log.Infof("Deploying Service with ID %s in background", dockerService.GetId())
 	fmt.Printf("Deploying Service with ID %s in background", dockerService.GetId())
-	go dockerService.Run(serviceConfig)
+	dockerService.Run(serviceConfig)
 }
 
 func (s *Stack) undeployInstance(serviceId string) {
@@ -166,13 +180,10 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 
 		if dockerService.Status == service.CREATED {
 			s.log.Debugf("Service %s created, checking healthy", dockerService.GetId())
-			go s.smokeTest(dockerService)
+			go dockerService.RunSmokeTest(s.smokeTestMonitor)
 		} else if dockerService.Status == service.SMOKE_READY {
 			s.log.Debugf("Service %s smoke test ready", dockerService.GetId())
-			go s.warmUp(dockerService)
-		} else if dockerService.Status == service.WARM_READY {
-			s.log.Debugf("Service %s warm up ready", dockerService.GetId())
-			dockerService.SetStatus(service.READY)
+			go dockerService.RunWarmUp(s.warmUpMonitor)
 		} else if dockerService.Status == service.READY {
 			s.log.Debugf("Service %s ready", dockerService.GetId())
 		} else if dockerService.Status == service.FAILED {
@@ -205,57 +216,6 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 
 	fmt.Printf("Services resume: success %d - failed %d - total %d (tolerance %f)\n", okInstances, failedInstances, totalInstances, tolerance)
 	return false
-}
-
-func (s *Stack) smokeTest(ds *service.DockerService) {
-	var err error
-	var addr string
-
-	// TODO check a puertos que no sean 8080
-	addr, err = ds.AddressAndPort(8080)
-	if err != nil {
-		ds.SetStatus(service.FAILED)
-		return
-	}
-
-	result := s.smokeTestMonitor.Check(addr)
-
-	s.log.Infof("Service %s, Smoke Test status %t", ds.GetId(), result)
-
-	if result {
-		ds.SetStatus(service.SMOKE_READY)
-	} else {
-		ds.SetStatus(service.FAILED)
-	}
-}
-
-func (s *Stack) warmUp(ds *service.DockerService) {
-	if !s.warmUpMonitor.Configured() {
-		s.log.Infof("Service %s, doesn't have Warm Up. Skiping", ds.GetId())
-		fmt.Printf("Service %s, doesn't have Warm Up. Skiping", ds.GetId())
-		ds.SetStatus(service.WARM_READY)
-		return
-	}
-
-	var err error
-	var addr string
-
-	// TODO check a puertos que no sean 8080
-	addr, err = ds.AddressAndPort(8080)
-	if err != nil {
-		ds.SetStatus(service.FAILED)
-		return
-	}
-
-	result := s.warmUpMonitor.Check(addr)
-
-	s.log.Infof("Service %s, Warm Up status %t", ds.GetId(), result)
-
-	if result {
-		ds.SetStatus(service.WARM_READY)
-	} else {
-		ds.SetStatus(service.FAILED)
-	}
 }
 
 func (s *Stack) LoadContainers(imageNameFilter string, containerNameFilter string) error {
