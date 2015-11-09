@@ -125,7 +125,7 @@ func (s *Stack) undeployInstance(serviceId string) {
 
 func (s *Stack) Rollback() {
 	for _, srv := range s.services {
-		if srv.GetStatus() != service.LOADED {
+		if srv.GetStep() != service.LOADED {
 			s.undeployInstance(srv.GetId())
 		}
 	}
@@ -152,18 +152,18 @@ func (s *Stack) getService(serviceId string) *service.DockerService {
 	return nil
 }
 
-func (s *Stack) ServicesWithStatus(status service.Status) []*service.DockerService {
+func (s *Stack) ServicesWithStatus(step service.Step) []*service.DockerService {
 	var services []*service.DockerService
 	for k, v := range s.services {
-		if v.GetStatus() == status {
+		if v.GetStep() == step {
 			services = append(services, s.services[k])
 		}
 	}
 	return services
 }
 
-func (s *Stack) countServicesWithStatus(status service.Status) int {
-	return len(s.ServicesWithStatus(status))
+func (s *Stack) countServicesWithStatus(step service.Step) int {
+	return len(s.ServicesWithStatus(step))
 }
 
 func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstances int, tolerance float64) bool {
@@ -173,20 +173,20 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 		s.log.Infoln("Signal received from", serviceId)
 
 		dockerService := s.getService(serviceId) // que pasa si dockerService es nil?
-		s.log.Infof("Service %s with status %s", serviceId, dockerService.GetStatus())
-		fmt.Printf("Service %s with status %s", serviceId, dockerService.GetStatus())
+		s.log.Infof("Service %s with status %s", serviceId, dockerService.GetStep())
+		fmt.Printf("Service %s with status %s", serviceId, dockerService.GetStep())
 
 		okInstances := s.countServicesWithStatus(service.READY)
 
-		if dockerService.GetStatus() == service.CREATED {
+		if dockerService.GetStep() == service.CREATED {
 			s.log.Debugf("Service %s created, checking healthy", dockerService.GetId())
 			go dockerService.RunSmokeTest(s.smokeTestMonitor)
-		} else if dockerService.GetStatus() == service.SMOKE_READY {
+		} else if dockerService.GetStep() == service.SMOKE_READY {
 			s.log.Debugf("Service %s smoke test ready", dockerService.GetId())
 			go dockerService.RunWarmUp(s.warmUpMonitor)
-		} else if dockerService.GetStatus() == service.READY {
+		} else if dockerService.GetStep() == service.READY {
 			s.log.Debugf("Service %s ready", dockerService.GetId())
-		} else if dockerService.GetStatus() == service.FAILED {
+		} else if dockerService.GetStep() == service.FAILED {
 			s.log.Debugf("Service %s failed", dockerService.GetId())
 			s.undeployInstance(dockerService.GetId())
 
@@ -220,7 +220,7 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 
 func (s *Stack) LoadContainers(imageNameFilter string, containerNameFilter string) error {
 	filter := helper.NewContainerFilter()
-	//filter.GetStatus() = []string{"running"}
+	//filter.GetStep() = []string{"running"}
 	filter.ImageRegexp = imageNameFilter
 	filter.NameRegexp = containerNameFilter
 
