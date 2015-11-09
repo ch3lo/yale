@@ -133,7 +133,7 @@ func deployBefore(c *cli.Context) error {
 }
 
 func callbackNotification(callbackUrl string, callbackJob string, token string, resume []callbackResume) {
-	util.PrintfAndLogInfof("Senting notification to %s", callbackUrl)
+	util.Log.Infof("Senting notification to %s", callbackUrl)
 
 	jsonResume, err := json.Marshal(resume)
 	if err != nil {
@@ -160,7 +160,7 @@ func callbackNotification(callbackUrl string, callbackJob string, token string, 
 	defer resp.Body.Close()
 
 	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Printf("Notification Status %d with response %s", resp.StatusCode, string(body))
+	util.Log.Infof("Notification Status %d with response %s", resp.StatusCode, string(body))
 }
 
 type callbackResume struct {
@@ -212,7 +212,7 @@ func deployCmd(c *cli.Context) {
 			if addr, err := services[k].AddressAndPort(8080); err != nil {
 				util.Log.Errorln(err)
 			} else {
-				util.PrintfAndLogInfof("Deployed %s with registrator tag %s , addr %s", services[k].Id, services[k].RegistratorId(), addr)
+				util.Log.Infof("Deployed %s with registrator tag %s , addr %s", services[k].GetId(), services[k].RegistratorId(), addr)
 				containerInfo := callbackResume{
 					RegisterId: services[k].RegistratorId(),
 					Address:    addr,

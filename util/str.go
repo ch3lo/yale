@@ -15,3 +15,9 @@ func MaskEnv(unmaskedEnvs []string) []string {
 
 	return maskedEnvs
 }
+
+var letters = []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func Letter(n int) string {
+	return string(letters[n])
+}

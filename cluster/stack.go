@@ -1,8 +1,7 @@
 package cluster
 
 import (
-	"fmt"
-
+	"github.com/Pallinder/go-randomdata"
 	log "github.com/Sirupsen/logrus"
 	"github.com/ch3lo/yale/helper"
 	"github.com/ch3lo/yale/monitor"
@@ -42,13 +41,30 @@ func NewStack(stackKey string, stackNofitication chan<- StackStatus, dh *helper.
 	s.id = stackKey
 	s.stackNofitication = stackNofitication
 	s.dockerApiHelper = dh
-	s.serviceIdNotification = make(chan string, 100)
+	s.serviceIdNotification = make(chan string, 1000)
 
 	s.log = util.Log.WithFields(log.Fields{
 		"stack": stackKey,
 	})
 
 	return s
+}
+
+func (s *Stack) createId() string {
+	for {
+		key := s.id + "_" + randomdata.Adjective()
+		exist := false
+
+		for _, srv := range s.services {
+			if srv.GetId() == key {
+				exist = true
+			}
+		}
+
+		if !exist {
+			return key
+		}
+	}
 }
 
 func (s *Stack) createMonitor(config monitor.MonitorConfig) monitor.Monitor {
@@ -69,23 +85,35 @@ func (s *Stack) createMonitor(config monitor.MonitorConfig) monitor.Monitor {
 }
 
 func (s *Stack) DeployCheckAndNotify(serviceConfig service.ServiceConfig, smokeConfig monitor.MonitorConfig, warmConfig monitor.MonitorConfig, instances int, tolerance float64) {
-	s.smokeTestMonitor = s.createMonitor(smokeConfig)
-	s.warmUpMonitor = s.createMonitor(warmConfig)
+	currentContainers := s.countServicesWithState(service.RUNNING)
 
-	for i := 1; i <= instances; i++ {
-		s.log.Debugf("Deploying instance number %d", i)
-		s.deployOneInstance(serviceConfig)
+	if currentContainers == instances {
+		s.log.Infoln("Stack was deployed")
+		s.setStatus(STACK_READY)
+	} else if currentContainers < instances {
+		s.smokeTestMonitor = s.createMonitor(smokeConfig)
+		s.warmUpMonitor = s.createMonitor(warmConfig)
+
+		for i := 1; i <= instances; i++ {
+			s.log.Debugf("Deploying instance number %d", i)
+			s.deployOneInstance(serviceConfig)
+		}
+
+		if s.checkInstances(serviceConfig, instances, tolerance) {
+			s.setStatus(STACK_READY)
+			return
+		}
+
+		s.setStatus(STACK_FAILED)
+	} else {
+		diff := currentContainers - instances
+		s.log.Printf("Stack has more containers than needed (%d from %d), undeploying...", currentContainers, instances)
+		s.UndeployInstances(diff)
+		s.setStatus(STACK_READY)
 	}
-
-	if s.checkInstances(serviceConfig, instances, tolerance) {
-		s.SetStatus(STACK_READY)
-		return
-	}
-
-	s.SetStatus(STACK_FAILED)
 }
 
-func (s *Stack) SetStatus(status StackStatus) {
+func (s *Stack) setStatus(status StackStatus) {
 	s.stackNofitication <- status
 }
 
@@ -94,24 +122,22 @@ func (s *Stack) addNewService(dockerService *service.DockerService) {
 }
 
 func (s *Stack) deployOneInstance(serviceConfig service.ServiceConfig) {
-	dockerService := service.NewDockerService(s.id, s.dockerApiHelper, s.serviceIdNotification)
+	dockerService := service.NewDockerService(s.createId(), s.dockerApiHelper, s.serviceIdNotification)
 	s.addNewService(dockerService)
 
 	s.log.Infof("Deploying Service with ID %s in background", dockerService.GetId())
-	fmt.Printf("Deploying Service with ID %s in background", dockerService.GetId())
-	go dockerService.Run(serviceConfig)
+	dockerService.Run(serviceConfig)
 }
 
 func (s *Stack) undeployInstance(serviceId string) {
 	dockerService := s.getService(serviceId)
 	s.log.Infof("Undeploying Service %s", serviceId)
-	fmt.Printf("Undeploying Service %s", serviceId)
 	dockerService.Undeploy()
 }
 
 func (s *Stack) Rollback() {
 	for _, srv := range s.services {
-		if srv.Status != service.LOADED {
+		if !srv.Loaded() {
 			s.undeployInstance(srv.GetId())
 		}
 	}
@@ -138,18 +164,32 @@ func (s *Stack) getService(serviceId string) *service.DockerService {
 	return nil
 }
 
-func (s *Stack) ServicesWithStatus(status service.Status) []*service.DockerService {
+func (s *Stack) ServicesWithStep(step service.Step) []*service.DockerService {
 	var services []*service.DockerService
 	for k, v := range s.services {
-		if v.Status == status {
+		if v.GetStep() == step {
 			services = append(services, s.services[k])
 		}
 	}
 	return services
 }
 
-func (s *Stack) countServicesWithStatus(status service.Status) int {
-	return len(s.ServicesWithStatus(status))
+func (s *Stack) ServicesWithState(state service.State) []*service.DockerService {
+	var services []*service.DockerService
+	for k, v := range s.services {
+		if v.CheckState(state) {
+			services = append(services, s.services[k])
+		}
+	}
+	return services
+}
+
+func (s *Stack) countServicesWithStep(step service.Step) int {
+	return len(s.ServicesWithStep(step))
+}
+
+func (s *Stack) countServicesWithState(state service.State) int {
+	return len(s.ServicesWithState(state))
 }
 
 func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstances int, tolerance float64) bool {
@@ -159,27 +199,23 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 		s.log.Infoln("Signal received from", serviceId)
 
 		dockerService := s.getService(serviceId) // que pasa si dockerService es nil?
-		s.log.Infof("Service %s with status %s", serviceId, dockerService.Status)
-		fmt.Printf("Service %s with status %s", serviceId, dockerService.Status)
+		s.log.Infof("Service %s with status %s", serviceId, dockerService.GetStep())
 
-		okInstances := s.countServicesWithStatus(service.READY)
+		okInstances := s.countServicesWithStep(service.STEP_WARM_READY)
 
-		if dockerService.Status == service.CREATED {
+		if dockerService.GetStep() == service.STEP_CREATED {
 			s.log.Debugf("Service %s created, checking healthy", dockerService.GetId())
-			go s.smokeTest(dockerService)
-		} else if dockerService.Status == service.SMOKE_READY {
+			go dockerService.RunSmokeTest(s.smokeTestMonitor)
+		} else if dockerService.GetStep() == service.STEP_SMOKE_READY {
 			s.log.Debugf("Service %s smoke test ready", dockerService.GetId())
-			go s.warmUp(dockerService)
-		} else if dockerService.Status == service.WARM_READY {
-			s.log.Debugf("Service %s warm up ready", dockerService.GetId())
-			dockerService.SetStatus(service.READY)
-		} else if dockerService.Status == service.READY {
+			go dockerService.RunWarmUp(s.warmUpMonitor)
+		} else if dockerService.GetStep() == service.STEP_WARM_READY {
 			s.log.Debugf("Service %s ready", dockerService.GetId())
-		} else if dockerService.Status == service.FAILED {
+		} else if dockerService.GetStep() == service.STEP_FAILED {
 			s.log.Debugf("Service %s failed", dockerService.GetId())
 			s.undeployInstance(dockerService.GetId())
 
-			failedInstances := s.countServicesWithStatus(service.FAILED)
+			failedInstances := s.countServicesWithStep(service.STEP_FAILED)
 
 			maxFailedServices := float64(totalInstances) * tolerance
 			s.log.Debugf("Failed Services %f", float64(failedInstances))
@@ -188,79 +224,28 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 				s.log.Debugf("Accepted Tolerance")
 				s.deployOneInstance(serviceConfig)
 			} else {
-				fmt.Printf("Services resume: success %d - failed %d - total %d (tolerance %f)\n", okInstances, failedInstances, totalInstances, tolerance)
+				s.log.Infof("Services resume: success %d - failed %d - total %d (tolerance %f)\n", okInstances, failedInstances, totalInstances, tolerance)
 				return false
 			}
 		}
 
 		s.log.Infof("Services resume %d/%d", okInstances, totalInstances)
-		fmt.Printf("Services resume %d/%d", okInstances, totalInstances)
 		if okInstances == totalInstances {
 			return true
 		}
 	}
 
-	okInstances := s.countServicesWithStatus(service.READY)
-	failedInstances := s.countServicesWithStatus(service.FAILED)
+	okInstances := s.countServicesWithStep(service.STEP_WARM_READY)
+	failedInstances := s.countServicesWithStep(service.STEP_FAILED)
 
-	fmt.Printf("Services resume: success %d - failed %d - total %d (tolerance %f)\n", okInstances, failedInstances, totalInstances, tolerance)
+	s.log.Infof("Services resume: success %d - failed %d - total %d (tolerance %f)\n", okInstances, failedInstances, totalInstances, tolerance)
 	return false
 }
 
-func (s *Stack) smokeTest(ds *service.DockerService) {
-	var err error
-	var addr string
-
-	// TODO check a puertos que no sean 8080
-	addr, err = ds.AddressAndPort(8080)
-	if err != nil {
-		ds.SetStatus(service.FAILED)
-		return
-	}
-
-	result := s.smokeTestMonitor.Check(addr)
-
-	s.log.Infof("Service %s, Smoke Test status %t", ds.GetId(), result)
-
-	if result {
-		ds.SetStatus(service.SMOKE_READY)
-	} else {
-		ds.SetStatus(service.FAILED)
-	}
-}
-
-func (s *Stack) warmUp(ds *service.DockerService) {
-	if !s.warmUpMonitor.Configured() {
-		s.log.Infof("Service %s, doesn't have Warm Up. Skiping", ds.GetId())
-		fmt.Printf("Service %s, doesn't have Warm Up. Skiping", ds.GetId())
-		ds.SetStatus(service.WARM_READY)
-		return
-	}
-
-	var err error
-	var addr string
-
-	// TODO check a puertos que no sean 8080
-	addr, err = ds.AddressAndPort(8080)
-	if err != nil {
-		ds.SetStatus(service.FAILED)
-		return
-	}
-
-	result := s.warmUpMonitor.Check(addr)
-
-	s.log.Infof("Service %s, Warm Up status %t", ds.GetId(), result)
-
-	if result {
-		ds.SetStatus(service.WARM_READY)
-	} else {
-		ds.SetStatus(service.FAILED)
-	}
-}
-
-func (s *Stack) LoadContainers(imageNameFilter string, containerNameFilter string) error {
+func (s *Stack) LoadFilteredContainers(imageNameFilter string, containerNameFilter string) error {
+	util.Log.Debugf("Loading containers with image name filter: %s - container name filter %s", imageNameFilter, containerNameFilter)
 	filter := helper.NewContainerFilter()
-	//filter.Status = []string{"running"}
+	//filter.GetStep() = []string{"running"}
 	filter.ImageRegexp = imageNameFilter
 	filter.NameRegexp = containerNameFilter
 
@@ -274,7 +259,26 @@ func (s *Stack) LoadContainers(imageNameFilter string, containerNameFilter strin
 		if err != nil {
 			return err
 		}
-		s.services = append(s.services, service.NewFromContainer(s.id, s.dockerApiHelper, c, s.serviceIdNotification))
+		s.services = append(s.services, service.NewFromContainer(s.createId(), s.dockerApiHelper, c, s.serviceIdNotification))
+	}
+
+	return nil
+}
+
+func (s *Stack) LoadTaggedContainers(imageName string, tag string) error {
+	util.Log.Debugf("Loading tagged containers with image name: %s - tag %s", imageName, tag)
+
+	containers, err := s.dockerApiHelper.ListTaggedContainers(imageName, tag)
+	if err != nil {
+		return err
+	}
+
+	for k := range containers {
+		c, err := s.dockerApiHelper.ContainerInspect(containers[k].ID)
+		if err != nil {
+			return err
+		}
+		s.services = append(s.services, service.NewFromContainer(s.createId(), s.dockerApiHelper, c, s.serviceIdNotification))
 	}
 
 	return nil
