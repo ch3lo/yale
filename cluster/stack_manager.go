@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"github.com/Pallinder/go-randomdata"
 	"github.com/ch3lo/yale/helper"
 	"github.com/ch3lo/yale/monitor"
 	"github.com/ch3lo/yale/service"
@@ -31,18 +30,24 @@ func (sm *StackManager) existStack(stackKey string) bool {
 }
 
 func (sm *StackManager) AppendStack(dh *helper.DockerHelper) {
+	i := 0
 	for {
-		key := randomdata.Country(randomdata.TwoCharCountry)
+		key := util.Letter(i)
 		if !sm.existStack(key) {
 			util.Log.Infof("API configured and mapped to %s", key)
 			sm.stacks[key] = NewStack(key, sm.stackNotification, dh)
 			break
 		}
+		i++
 	}
 }
 
 func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, smokeConfig monitor.MonitorConfig, warmConfig monitor.MonitorConfig, instances int, tolerance float64) bool {
-	sm.loadContainers(serviceConfig.ImageName+":"+serviceConfig.Tag, ".*")
+	for stackKey, _ := range sm.stacks {
+		if err := sm.stacks[stackKey].LoadTaggedContainers(serviceConfig.ImageName, serviceConfig.Tag); err != nil {
+			return false
+		}
+	}
 
 	for stackKey, _ := range sm.stacks {
 		go sm.stacks[stackKey].DeployCheckAndNotify(serviceConfig, smokeConfig, warmConfig, instances, tolerance)
@@ -63,15 +68,17 @@ func (sm *StackManager) DeployedContainers() []*service.DockerService {
 	var containers []*service.DockerService
 
 	for stackKey, _ := range sm.stacks {
-		containers = append(containers, sm.stacks[stackKey].ServicesWithStatus(service.READY)...)
+		containers = append(containers, sm.stacks[stackKey].ServicesWithStep(service.STEP_WARM_READY)...)
 	}
 
 	return containers
 }
 
 func (sm *StackManager) SearchContainers(imageNameFilter string, containerNameFilter string) (map[string][]*service.DockerService, error) {
-	if err := sm.loadContainers(imageNameFilter, containerNameFilter); err != nil {
-		return nil, err
+	for stackKey, _ := range sm.stacks {
+		if err := sm.stacks[stackKey].LoadFilteredContainers(imageNameFilter, containerNameFilter); err != nil {
+			return nil, err
+		}
 	}
 
 	containers := make(map[string][]*service.DockerService)
@@ -80,18 +87,6 @@ func (sm *StackManager) SearchContainers(imageNameFilter string, containerNameFi
 	}
 
 	return containers, nil
-}
-
-func (sm *StackManager) loadContainers(imageNameFilter string, containerNameFilter string) error {
-	util.Log.Debugf("Loading containers with image name: %s", imageNameFilter)
-
-	for stackKey, _ := range sm.stacks {
-		if err := sm.stacks[stackKey].LoadContainers(imageNameFilter, containerNameFilter); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (sm *StackManager) Rollback() {

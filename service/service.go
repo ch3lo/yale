@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/Pallinder/go-randomdata"
 	log "github.com/Sirupsen/logrus"
 	"github.com/ch3lo/yale/helper"
 	"github.com/ch3lo/yale/monitor"
@@ -15,39 +14,47 @@ import (
 	"github.com/fsouza/go-dockerclient"
 )
 
-// Flow LOADED -> [UNDEPLOYED]
-// Flow INIT -> CREATED -> SMOKE_READY -> READY/FAILED -> [UNDEPLOYED]
-//	INIT        Contenedor configurado pero aun no se crea ni corre
-//	CREATED     Contenedor creado y corriendo pero aún no verificado
-//	SMOKE_READY Contenedor ha pasado las pruebas de humo
-//	READY       Contenedor que paso exitoso el despliegue
-//	FAILED      Contenedor que fallo en el despliegue
-//	UNDEPLOYED  Contenedor removido
-//	LOADED      Contanedor cargado desde la API
+// Flow CREATED -> SMOKE_READY -> WARM_READY -> [FAILED]
+// STEP_CREATED     Contenedor creado y corriendo pero aún no verificado
+// STEP_SMOKE_READY Contenedor ha pasado las pruebas de humo
+// STEP_WARM_READY  Contenedor que paso exitoso el despliegue
+// STEP_FAILED      Contenedor que fallo en el despliegue
 type Step int
 
 const (
-	INIT Step = 1 + iota
-	CREATED
-	SMOKE_READY
-	READY
-	FAILED
-	UNDEPLOYED
-	LOADED
+	STEP_CREATED Step = 1 + iota
+	STEP_SMOKE_READY
+	STEP_WARM_READY
+	STEP_FAILED
 )
 
 var step = [...]string{
-	"INIT",
-	"CREATED",
-	"SMOKE_READY",
-	"READY",
-	"FAILED",
-	"UNDEPLOYED",
-	"LOADED",
+	"STEP_CREATED",
+	"STEP_SMOKE_READY",
+	"STEP_WARM_UP",
+	"STEP_FAILED",
 }
 
 func (s Step) String() string {
 	return step[s-1]
+}
+
+// RUNNING     Contenedor corriendo. Se omiten aquellos en estado de Restarting
+// UNDEPLOYED  Contenedor removido
+type State int
+
+const (
+	RUNNING State = 1 + iota
+	UNDEPLOYED
+)
+
+var state = [...]string{
+	"RUNNING",
+	"UNDEPLOYED",
+}
+
+func (s State) String() string {
+	return state[s-1]
 }
 
 type ServiceConfig struct {
@@ -72,6 +79,8 @@ func (s *ServiceConfig) String() string {
 
 type DockerService struct {
 	id              string
+	loaded          bool
+	state           State
 	step            Step
 	statusChannel   chan<- string
 	dockerApihelper *helper.DockerHelper
@@ -79,11 +88,11 @@ type DockerService struct {
 	log             *log.Entry
 }
 
-func NewDockerService(prefixId string, dh *helper.DockerHelper, sc chan<- string) *DockerService {
+func NewDockerService(id string, dh *helper.DockerHelper, sc chan<- string) *DockerService {
 	ds := new(DockerService)
-	ds.id = prefixId + "_" + randomdata.SillyName()
+	ds.id = id
 	ds.dockerApihelper = dh
-	ds.step = INIT
+	ds.loaded = false
 	ds.statusChannel = sc
 
 	ds.log = util.Log.WithFields(log.Fields{
@@ -95,10 +104,10 @@ func NewDockerService(prefixId string, dh *helper.DockerHelper, sc chan<- string
 	return ds
 }
 
-func NewFromContainer(prefixId string, dh *helper.DockerHelper, container *docker.Container, sc chan<- string) *DockerService {
-	ds := NewDockerService(prefixId, dh, sc)
+func NewFromContainer(id string, dh *helper.DockerHelper, container *docker.Container, sc chan<- string) *DockerService {
+	ds := NewDockerService(id, dh, sc)
 	ds.container = container
-	ds.step = LOADED
+	ds.loaded = true
 
 	return ds
 }
@@ -114,7 +123,7 @@ func (ds *DockerService) RegistratorId() string {
 func (ds *DockerService) dockerCli() *helper.DockerHelper {
 	dh := ds.dockerApihelper
 	if dh == nil {
-		ds.setStep(FAILED)
+		ds.setStep(STEP_FAILED)
 		return nil
 	}
 
@@ -145,10 +154,39 @@ func (ds *DockerService) GetStep() Step {
 	return ds.step
 }
 
+func (ds *DockerService) setState(state State) {
+	ds.state = state
+	//ds.statusChannel <- ds.id
+}
+
+func (ds *DockerService) CheckState(state State) bool {
+	if ds.container == nil {
+		return false
+	}
+
+	if state == RUNNING {
+		return (ds.container.State.Running &&
+			!ds.container.State.Paused &&
+			!ds.container.State.Restarting)
+	}
+
+	if state == UNDEPLOYED && ds.state == UNDEPLOYED {
+		return true
+	}
+
+	return false
+}
+
 func (ds *DockerService) Run(serviceConfig ServiceConfig) {
+	labels := map[string]string{
+		"image_name": serviceConfig.ImageName,
+		"image_tag":  serviceConfig.Tag,
+	}
+
 	dockerConfig := docker.Config{
-		Image: serviceConfig.ImageName + ":" + serviceConfig.Tag,
-		Env:   serviceConfig.Envs,
+		Image:  serviceConfig.ImageName + ":" + serviceConfig.Tag,
+		Env:    serviceConfig.Envs,
+		Labels: labels,
 	}
 
 	dockerHostConfig := docker.HostConfig{
@@ -166,19 +204,18 @@ func (ds *DockerService) Run(serviceConfig ServiceConfig) {
 	ds.container, err = ds.dockerCli().CreateAndRun(opts)
 
 	if err != nil {
-		ds.log.Errorf("Run error: %s", err)
-		fmt.Printf("Container Run with error: %s", err)
-		ds.setStep(FAILED)
+		ds.log.Errorf("Container Run with error: %s", err)
+		ds.setStep(STEP_FAILED)
 		return
 	}
 
 	ds.log.Debugf("Service Registrator ID %s", ds.RegistratorId())
 
-	ds.setStep(CREATED)
+	ds.setStep(STEP_CREATED)
 }
 
 func (ds *DockerService) Undeploy() {
-	if ds.GetStep() == UNDEPLOYED {
+	if ds.CheckState(UNDEPLOYED) {
 		ds.log.Infoln("Service was undeployed")
 		return
 	}
@@ -193,7 +230,7 @@ func (ds *DockerService) Undeploy() {
 		ds.log.Errorln("No se pudo remover el contenedor", err)
 		return
 	}
-	ds.setStep(UNDEPLOYED)
+	ds.setState(UNDEPLOYED)
 }
 
 func (ds *DockerService) ContainerName() string {
@@ -215,11 +252,8 @@ func (ds *DockerService) ContainerState() string {
 	return ds.container.State.String()
 }
 
-func (ds *DockerService) Running() bool {
-	if ds.container.State.Running && !ds.container.State.Paused {
-		return true
-	}
-	return false
+func (ds *DockerService) Loaded() bool {
+	return ds.loaded
 }
 
 func (ds *DockerService) PublicPorts() map[int64]int64 {
@@ -257,7 +291,7 @@ func (ds *DockerService) RunSmokeTest(monitor monitor.Monitor) {
 	// TODO check a puertos que no sean 8080
 	addr, err = ds.AddressAndPort(8080)
 	if err != nil {
-		ds.setStep(FAILED)
+		ds.setStep(STEP_FAILED)
 		return
 	}
 
@@ -266,17 +300,16 @@ func (ds *DockerService) RunSmokeTest(monitor monitor.Monitor) {
 	ds.log.Infof("Smoke Test status %t", result)
 
 	if result {
-		ds.setStep(SMOKE_READY)
+		ds.setStep(STEP_SMOKE_READY)
 	} else {
-		ds.setStep(FAILED)
+		ds.setStep(STEP_FAILED)
 	}
 }
 
 func (ds *DockerService) RunWarmUp(monitor monitor.Monitor) {
 	if !monitor.Configured() {
 		ds.log.Infoln("Service, doesn't have Warm Up. Skiping")
-		fmt.Println("Service, doesn't have Warm Up. Skiping")
-		ds.setStep(READY)
+		ds.setStep(STEP_WARM_READY)
 		return
 	}
 
@@ -286,7 +319,7 @@ func (ds *DockerService) RunWarmUp(monitor monitor.Monitor) {
 	// TODO check a puertos que no sean 8080
 	addr, err = ds.AddressAndPort(8080)
 	if err != nil {
-		ds.setStep(FAILED)
+		ds.setStep(STEP_FAILED)
 		return
 	}
 
@@ -295,8 +328,8 @@ func (ds *DockerService) RunWarmUp(monitor monitor.Monitor) {
 	ds.log.Infof("Warm Up status %t", result)
 
 	if result {
-		ds.setStep(READY)
+		ds.setStep(STEP_WARM_READY)
 	} else {
-		ds.setStep(FAILED)
+		ds.setStep(STEP_FAILED)
 	}
 }

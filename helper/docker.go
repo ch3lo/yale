@@ -105,7 +105,6 @@ func (dh *DockerHelper) authConfig(registry string) (docker.AuthConfiguration, e
 }
 
 func (dh *DockerHelper) ListContainers(filter *containerFilter) ([]docker.APIContainers, error) {
-
 	util.Log.Debugln("Retrieving containers")
 
 	containers, err := dh.client.ListContainers(docker.ListContainersOptions{Filters: map[string][]string{"status": filter.Status}})
@@ -127,6 +126,18 @@ func (dh *DockerHelper) ListContainers(filter *containerFilter) ([]docker.APICon
 	}
 
 	return filteredContainers, nil
+}
+
+func (dh *DockerHelper) ListTaggedContainers(image string, tag string) ([]docker.APIContainers, error) {
+	util.Log.Debugln("Retrieving containers")
+
+	containers, err := dh.client.ListContainers(docker.ListContainersOptions{Filters: map[string][]string{"label": []string{"image_name=" + image, "iamge_tag=" + tag}}})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return containers, nil
 }
 
 func (dh *DockerHelper) PullImage(imageName string) error {
