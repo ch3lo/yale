@@ -129,9 +129,9 @@ func (dh *DockerHelper) ListContainers(filter *containerFilter) ([]docker.APICon
 }
 
 func (dh *DockerHelper) ListTaggedContainers(image string, tag string) ([]docker.APIContainers, error) {
-	util.Log.Debugln("Retrieving containers")
-
-	containers, err := dh.client.ListContainers(docker.ListContainersOptions{Filters: map[string][]string{"label": []string{"image_name=" + image, "iamge_tag=" + tag}}})
+	filter := map[string][]string{"label": []string{"image_name=" + image}} // no funciona con 2 tags
+	util.Log.Debugf("Retrieving containers with filter %#v", filter)
+	containers, err := dh.client.ListContainers(docker.ListContainersOptions{All: true, Filters: filter})
 
 	if err != nil {
 		return nil, err
