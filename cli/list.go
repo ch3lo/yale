@@ -14,7 +14,12 @@ func listFlags() []cli.Flag {
 		cli.StringFlag{
 			Name:  "image-filter, if",
 			Value: ".*",
-			Usage: "Expresion regultar para filtrar contenedores por el nombre de la imagen",
+			Usage: "Expresion regular para filtrar contenedores por el nombre de la imagen",
+		},
+		cli.StringFlag{
+			Name:  "tag-filter, tf",
+			Value: ".*",
+			Usage: "Expresion regular para filtrar contenedores por el tag",
 		},
 		cli.StringFlag{
 			Name:  "cname-filter, cf",
@@ -31,7 +36,7 @@ func listFlags() []cli.Flag {
 
 func listCmd(c *cli.Context) {
 	data := [][]string{}
-	stackMap, err := stackManager.SearchContainers(c.String("if"), c.String("cf"))
+	stackMap, err := stackManager.SearchContainers(c.String("if"), c.String("tf"), c.String("cf"))
 	if err != nil {
 		util.Log.Fatalln(err)
 	}
