@@ -179,7 +179,7 @@ func setupGlobalFlags(c *cli.Context) error {
 	stackManager = cluster.NewStackManager()
 
 	for _, ep := range c.StringSlice("endpoint") {
-		util.Log.Infof("Configuring Docker Endpoint %s", ep)
+		util.Log.Infof("Configurando el endpoint de Docker %s", ep)
 		var dh *helper.DockerHelper
 		if c.Bool("tlsverify") {
 			ca := buildCertPath(c.String("cert_path"), c.String("tlscacert"))

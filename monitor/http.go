@@ -23,21 +23,21 @@ func (h *HttpMonitor) Check(addr string) bool {
 
 	try := 1
 	for h.retries == -1 || try <= h.retries {
-		util.Log.Infof("HTTP Check attempt %d/%d", try, h.retries)
+		util.Log.Infof("HTTP Check intento %d/%d", try, h.retries)
 		resp, err := http.Get(healthyEndpoint)
 		if err == nil {
-			util.Log.Debugf("Response received with status %d", resp.StatusCode)
+			util.Log.Debugf("Se recibió respuesta del servidor con estado %d", resp.StatusCode)
 
 			if resp.StatusCode == 200 {
-				util.Log.Debugln("Checking response ...")
+				util.Log.Debugln("Verificando la respuesta ...")
 				body, _ := ioutil.ReadAll(resp.Body)
 
 				result := false
 				if expected.MatchString(string(body)) {
-					util.Log.Infoln("Response OK")
+					util.Log.Infoln("Respuesta OK")
 					result = true
 				} else {
-					util.Log.Warnf("Response FAILED with content %s", string(body))
+					util.Log.Warnf("Respuesta con error %s", string(body))
 				}
 
 				resp.Body.Close()

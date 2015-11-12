@@ -19,7 +19,6 @@ func ParseMultiFileLinesToArray(envFiles []string) ([]string, error) {
 	var envs []string
 
 	for _, path := range envFiles {
-		Log.Debugf("Parsing file %s", envFiles)
 		parsedEnvs, err := ParseSingleFileLinesToArray(path)
 		if err != nil {
 			return nil, err
@@ -31,7 +30,7 @@ func ParseMultiFileLinesToArray(envFiles []string) ([]string, error) {
 }
 
 func ParseSingleFileLinesToArray(path string) ([]string, error) {
-	Log.Debugf("Parsing single file %s", path)
+	Log.Debugf("Parseando el archivo %s", path)
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -43,5 +42,6 @@ func ParseSingleFileLinesToArray(path string) ([]string, error) {
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
+	Log.Debugln("Parseo exitoso")
 	return lines, scanner.Err()
 }

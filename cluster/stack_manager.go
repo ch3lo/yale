@@ -55,8 +55,9 @@ func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, smokeConfig 
 
 	for i := 0; i < len(sm.stacks); i++ {
 		stackStatus := <-sm.stackNotification
-		util.Log.Infoln("POD STATUS RECEIVED", stackStatus)
+		util.Log.Infoln("Stack notification received with status", stackStatus)
 		if stackStatus == STACK_FAILED {
+			util.Log.Errorln("Fallo el stack, se procederá a realizar Rollback")
 			sm.Rollback()
 			return false
 		}
@@ -105,6 +106,7 @@ func (sm *StackManager) Tagged(image string, tag string) (map[string][]*service.
 }
 
 func (sm *StackManager) Rollback() {
+	util.Log.Infoln("Starting Rollback")
 	for stack, _ := range sm.stacks {
 		sm.stacks[stack].Rollback()
 	}

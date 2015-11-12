@@ -86,8 +86,7 @@ func (dh *DockerHelper) authConfig(registry string) (docker.AuthConfiguration, e
 	var r io.Reader
 	var err error
 
-	util.Log.Infoln("Retrieving authenticated user")
-	util.Log.Debugf("GetDockerHelper %#v", dh)
+	util.Log.Infoln("Obteniendo la configuración del usuario del archivo", dh.authConfigPath)
 	if r, err = os.Open(dh.authConfigPath); err != nil {
 		return docker.AuthConfiguration{}, err
 	}
@@ -104,11 +103,11 @@ func (dh *DockerHelper) authConfig(registry string) (docker.AuthConfiguration, e
 		}
 	}
 
-	return docker.AuthConfiguration{}, errors.New("Auth not found")
+	return docker.AuthConfiguration{}, errors.New("No se encuentraron las credenciales de autenticación")
 }
 
 func (dh *DockerHelper) ListContainers(filter *containerFilter) ([]docker.APIContainers, error) {
-	util.Log.Debugln("Retrieving containers")
+	util.Log.Debugln("Obteniendo el listado de contenedores")
 
 	containers, err := dh.client.ListContainers(docker.ListContainersOptions{Filters: map[string][]string{"status": filter.Status}})
 
@@ -121,7 +120,7 @@ func (dh *DockerHelper) ListContainers(filter *containerFilter) ([]docker.APICon
 
 	var filteredContainers []docker.APIContainers
 	for _, container := range containers {
-		util.Log.Debugf("Container %#v", container)
+		util.Log.Debugf("Filtrando el contenedor %s, image %s y nombre %#v", container.ID, container.Image, container.Names)
 
 		if validName.MatchString(container.Names[0]) && validImage.MatchString(container.Image) {
 			filteredContainers = append(filteredContainers, container)
@@ -133,7 +132,7 @@ func (dh *DockerHelper) ListContainers(filter *containerFilter) ([]docker.APICon
 
 func (dh *DockerHelper) ListTaggedContainers(image string, tag string) ([]docker.APIContainers, error) {
 	filter := map[string][]string{"label": []string{"image_name=" + image}} // no funciona con 2 tags
-	util.Log.Debugf("Retrieving containers with filter %#v", filter)
+	util.Log.Debugf("Obteniendo el listado de contenedores con filtro %#v", filter)
 	containers, err := dh.client.ListContainers(docker.ListContainersOptions{All: true, Filters: filter})
 
 	if err != nil {
@@ -150,7 +149,7 @@ func (dh *DockerHelper) PullImage(imageName string) error {
 		return aErr
 	}
 
-	util.Log.Infoln("Pulling image", imageName)
+	util.Log.Infoln("Realizando el pulling de la imagen", imageName)
 	var buf bytes.Buffer
 	pullImageOpts := docker.PullImageOptions{Repository: imageName, OutputStream: &buf}
 	err := dh.client.PullImage(pullImageOpts, auth)
@@ -169,33 +168,32 @@ func (dh *DockerHelper) PullImage(imageName string) error {
 
 func (dh *DockerHelper) CreateAndRun(containerOpts docker.CreateContainerOptions) (*docker.Container, error) {
 
-	util.Log.Infoln("Pulling image")
 	err := dh.PullImage(containerOpts.Config.Image)
 	if err != nil {
 		return nil, err
 	}
 
-	util.Log.Infoln("Deploying image", containerOpts.Config.Image)
+	util.Log.Infoln("Creando el contenedor con imagen", containerOpts.Config.Image)
 	container, err := dh.client.CreateContainer(containerOpts)
 	if err != nil {
 		return nil, err
 	}
 
-	util.Log.Infoln("Starting container", container.ID)
+	util.Log.Infoln("Contenedor creado... Se inicia el proceso de arranque", container.ID)
 	err = dh.client.StartContainer(container.ID, nil)
 	if err != nil {
 		switch err.(type) {
 		case *docker.NoSuchContainer:
 			return nil, err
 		case *docker.ContainerAlreadyRunning:
-			util.Log.Infof("Container %s already running", container.ID)
+			util.Log.Infof("El contenedor %s ya estaba corriendo", container.ID)
 			break
 		default:
 			return nil, err
 		}
 	}
 
-	util.Log.Infoln("Inspecting container", container.Name)
+	util.Log.Infoln("Contenedor corriendo... Inspeccionando sus datos", container.Name)
 	container, err = dh.ContainerInspect(container.ID)
 	if err != nil {
 		return nil, err
@@ -221,20 +219,20 @@ func (dh *DockerHelper) ContainerAddress(containerId string, internalPort int64)
 
 	util.Log.Debugf("Api Ports %#v", container.NetworkSettings.PortMappingAPI())
 	for _, val := range container.NetworkSettings.PortMappingAPI() {
-		util.Log.Debugf("Private Port %d - Public Port %d", val.PrivatePort, val.PublicPort)
+		util.Log.Debugf("Puerto privado %d - Puerto Publico %d", val.PrivatePort, val.PublicPort)
 		if val.PrivatePort == internalPort {
 			addr := val.IP + ":" + strconv.FormatInt(val.PublicPort, 10)
-			util.Log.Debugf("Calculated Addr %s", addr)
+			util.Log.Debugf("La dirección calculada es %s", addr)
 			return addr, nil
 		}
 	}
 
-	return "", errors.New("Internal Container Port not found")
+	return "", errors.New("No se encontró el puerto interno del contenedor")
 }
 
 func (dh *DockerHelper) UndeployContainer(containerId string, remove bool, timeout uint) error {
 
-	util.Log.Infoln("Undeploying container", containerId)
+	util.Log.Infoln("Se está iniciando el proceso de undeploy del contenedor", containerId)
 
 	// Un valor de 0 sera interpretado como por defecto
 	if timeout == 0 {
@@ -243,16 +241,16 @@ func (dh *DockerHelper) UndeployContainer(containerId string, remove bool, timeo
 
 	var err error
 
-	util.Log.Infoln("Stopping container", containerId)
+	util.Log.Infoln("Deteniendo el contenedor", containerId)
 	err = dh.client.StopContainer(containerId, timeout)
 
 	if err != nil {
 		switch err.(type) {
 		case *docker.NoSuchContainer:
-			util.Log.Infoln("No such container", containerId)
+			util.Log.Infoln("No se encontró el contenedor", containerId)
 			return nil
 		case *docker.ContainerNotRunning:
-			util.Log.Infof("Container %s is not running", containerId)
+			util.Log.Infof("El contenedor %s no estaba corriendo", containerId)
 			break
 		default:
 			return err
@@ -260,7 +258,7 @@ func (dh *DockerHelper) UndeployContainer(containerId string, remove bool, timeo
 	}
 
 	if remove {
-		util.Log.Infoln("Removing container", containerId)
+		util.Log.Infoln("Se inició el proceso de remover el contenedor", containerId)
 		opts := docker.RemoveContainerOptions{ID: containerId}
 		err = dh.client.RemoveContainer(opts)
 		if err != nil {
