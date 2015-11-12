@@ -20,26 +20,29 @@ func NewStackManager() *StackManager {
 	return sm
 }
 
-func (sm *StackManager) existStack(stackKey string) bool {
-	for stack := range sm.stacks {
-		if stack == stackKey {
-			return true
-		}
-	}
-	return false
-}
-
-func (sm *StackManager) AppendStack(dh *helper.DockerHelper) {
+func (sm *StackManager) createId() string {
 	i := 0
 	for {
 		key := util.Letter(i)
-		if !sm.existStack(key) {
-			util.Log.Infof("API configured and mapped to %s", key)
-			sm.stacks[key] = NewStack(key, sm.stackNotification, dh)
-			break
+		exist := false
+
+		for k := range sm.stacks {
+			if k == key {
+				exist = true
+			}
+		}
+
+		if !exist {
+			return key
 		}
 		i++
 	}
+}
+
+func (sm *StackManager) AppendStack(dh *helper.DockerHelper) {
+	key := sm.createId()
+	util.Log.Infof("API configurada y mapeada a la llave %s", key)
+	sm.stacks[key] = NewStack(key, sm.stackNotification, dh)
 }
 
 func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, smokeConfig monitor.MonitorConfig, warmConfig monitor.MonitorConfig, instances int, tolerance float64) bool {
@@ -55,7 +58,7 @@ func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, smokeConfig 
 
 	for i := 0; i < len(sm.stacks); i++ {
 		stackStatus := <-sm.stackNotification
-		util.Log.Infoln("Stack notification received with status", stackStatus)
+		util.Log.Infoln("Se recibió notificación del Stack con estado", stackStatus)
 		if stackStatus == STACK_FAILED {
 			util.Log.Errorln("Fallo el stack, se procederá a realizar Rollback")
 			sm.Rollback()
@@ -106,7 +109,7 @@ func (sm *StackManager) Tagged(image string, tag string) (map[string][]*service.
 }
 
 func (sm *StackManager) Rollback() {
-	util.Log.Infoln("Starting Rollback")
+	util.Log.Infoln("Iniciando el Rollback")
 	for stack, _ := range sm.stacks {
 		sm.stacks[stack].Rollback()
 	}

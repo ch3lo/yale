@@ -8,8 +8,8 @@ import (
 )
 
 type TcpMonitor struct {
-	endpoint string
-	expect   string
+	request  string
+	expected string
 	retries  int
 }
 
@@ -35,12 +35,12 @@ func (tcp *TcpMonitor) Check(addr string) bool {
 	return false
 }
 
-func (tcp *TcpMonitor) SetEndpoint(ep string) {
-	tcp.endpoint = ep
+func (tcp *TcpMonitor) SetRequest(ep string) {
+	tcp.request = ep
 }
 
-func (tcp *TcpMonitor) SetExpect(ex string) {
-	tcp.expect = ex
+func (tcp *TcpMonitor) SetExpected(ex string) {
+	tcp.expected = ex
 }
 
 func (tcp *TcpMonitor) SetRetries(retries int) {

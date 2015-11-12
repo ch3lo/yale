@@ -86,7 +86,7 @@ func (dh *DockerHelper) authConfig(registry string) (docker.AuthConfiguration, e
 	var r io.Reader
 	var err error
 
-	util.Log.Infoln("Obteniendo la configuración del usuario del archivo", dh.authConfigPath)
+	util.Log.Infoln("Obteniendo los parámetros de autenticación del archivo", dh.authConfigPath)
 	if r, err = os.Open(dh.authConfigPath); err != nil {
 		return docker.AuthConfiguration{}, err
 	}
@@ -103,7 +103,7 @@ func (dh *DockerHelper) authConfig(registry string) (docker.AuthConfiguration, e
 		}
 	}
 
-	return docker.AuthConfiguration{}, errors.New("No se encuentraron las credenciales de autenticación")
+	return docker.AuthConfiguration{}, errors.New("No se encontraron las credenciales de autenticación")
 }
 
 func (dh *DockerHelper) ListContainers(filter *containerFilter) ([]docker.APIContainers, error) {

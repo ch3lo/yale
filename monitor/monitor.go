@@ -29,16 +29,16 @@ func GetMonitor(t string) MonitorType {
 }
 
 type MonitorConfig struct {
-	Type    MonitorType
-	Retries int
-	Ping    string
-	Pong    string
+	Type     MonitorType
+	Retries  int
+	Request  string
+	Expected string
 }
 
 type Monitor interface {
 	Check(addr string) bool
-	SetEndpoint(ep string)
-	SetExpect(ex string)
+	SetRequest(ep string)
+	SetExpected(ex string)
 	SetRetries(retries int)
 	Configured() bool
 }

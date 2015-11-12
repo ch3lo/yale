@@ -178,6 +178,7 @@ func (ds *DockerService) CheckState(state State) bool {
 }
 
 func (ds *DockerService) Run(serviceConfig ServiceConfig) {
+	ds.log.Infoln("Iniciando el despliegue del servicio")
 	labels := map[string]string{
 		"image_name": serviceConfig.ImageName,
 		"image_tag":  serviceConfig.Tag,
@@ -216,6 +217,7 @@ func (ds *DockerService) Run(serviceConfig ServiceConfig) {
 }
 
 func (ds *DockerService) Undeploy() {
+	ds.log.Infoln("Iniciando el proceso de Undeploy")
 	if ds.CheckState(UNDEPLOYED) {
 		ds.log.Infoln("El servicio ya se habia removido (undeployed)")
 		return
