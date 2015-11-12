@@ -10,16 +10,16 @@ import (
 )
 
 type HttpMonitor struct {
-	endpoint string
-	expect   string
+	request  string
+	expected string
 	retries  int
 }
 
 func (h *HttpMonitor) Check(addr string) bool {
 
-	healthyEndpoint := "http://" + addr + h.endpoint
+	healthyEndpoint := "http://" + addr + h.request
 
-	expected, _ := regexp.Compile(".*")
+	expected, _ := regexp.Compile(h.expected)
 
 	try := 1
 	for h.retries == -1 || try <= h.retries {
@@ -54,12 +54,12 @@ func (h *HttpMonitor) Check(addr string) bool {
 	return false
 }
 
-func (http *HttpMonitor) SetEndpoint(ep string) {
-	http.endpoint = ep
+func (http *HttpMonitor) SetRequest(ep string) {
+	http.request = ep
 }
 
-func (http *HttpMonitor) SetExpect(ex string) {
-	http.expect = ex
+func (http *HttpMonitor) SetExpected(ex string) {
+	http.expected = ex
 }
 
 func (http *HttpMonitor) SetRetries(retries int) {
@@ -67,7 +67,7 @@ func (http *HttpMonitor) SetRetries(retries int) {
 }
 
 func (http *HttpMonitor) Configured() bool {
-	if http.endpoint != "" && http.retries != 0 {
+	if http.request != "" && http.retries != 0 {
 		return true
 	}
 

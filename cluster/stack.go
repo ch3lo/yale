@@ -70,7 +70,7 @@ func (s *Stack) createId() string {
 func (s *Stack) createMonitor(config monitor.MonitorConfig) monitor.Monitor {
 	var mon monitor.Monitor
 
-	s.log.Infof("Creando monitor con mode [%s] y request [%s]", config.Type, config.Ping)
+	s.log.Infof("Creando monitor con mode [%s] y request [%s]", config.Type, config.Request)
 	if config.Type == monitor.TCP {
 		mon = new(monitor.TcpMonitor)
 	} else {
@@ -78,8 +78,8 @@ func (s *Stack) createMonitor(config monitor.MonitorConfig) monitor.Monitor {
 	}
 
 	mon.SetRetries(config.Retries)
-	mon.SetEndpoint(config.Ping)
-	mon.SetExpect(config.Pong)
+	mon.SetRequest(config.Request)
+	mon.SetExpected(config.Expected)
 
 	return mon
 }

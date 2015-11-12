@@ -187,17 +187,17 @@ func deployCmd(c *cli.Context) {
 	}
 
 	smokeConfig := monitor.MonitorConfig{
-		Retries: c.Int("smoke-retries"),
-		Type:    monitor.GetMonitor(c.String("smoke-type")),
-		Ping:    c.String("smoke-request"),
-		Pong:    c.String("smoke-expected"),
+		Retries:  c.Int("smoke-retries"),
+		Type:     monitor.GetMonitor(c.String("smoke-type")),
+		Request:  c.String("smoke-request"),
+		Expected: c.String("smoke-expected"),
 	}
 
 	warmUpConfig := monitor.MonitorConfig{
-		Retries: 1,
-		Type:    monitor.HTTP,
-		Ping:    c.String("warmup-request"),
-		Pong:    c.String("warmup-expected"),
+		Retries:  1,
+		Type:     monitor.HTTP,
+		Request:  c.String("warmup-request"),
+		Expected: c.String("warmup-expected"),
 	}
 
 	util.Log.Debugf("La configuración del servicio es: %#v", serviceConfig.String())
