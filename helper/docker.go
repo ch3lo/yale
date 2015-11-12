@@ -185,10 +185,10 @@ func (dh *DockerHelper) CreateAndRun(containerOpts docker.CreateContainerOptions
 	err = dh.client.StartContainer(container.ID, nil)
 	if err != nil {
 		switch err.(type) {
-		case NoSuchContainer:
+		case *docker.NoSuchContainer:
 			return nil, err
-		case ContainerAlreadyRunning:
-			util.Log.Infof("Container %s already running", containerId)
+		case *docker.ContainerAlreadyRunning:
+			util.Log.Infof("Container %s already running", container.ID)
 			break
 		default:
 			return nil, err
@@ -248,10 +248,10 @@ func (dh *DockerHelper) UndeployContainer(containerId string, remove bool, timeo
 
 	if err != nil {
 		switch err.(type) {
-		case NoSuchContainer:
+		case *docker.NoSuchContainer:
 			util.Log.Infoln("No such container", containerId)
 			return nil
-		case ContainerNotRunning:
+		case *docker.ContainerNotRunning:
 			util.Log.Infof("Container %s is not running", containerId)
 			break
 		default:
