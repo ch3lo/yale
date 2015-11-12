@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/ch3lo/yale/util"
 )
 
@@ -13,19 +14,22 @@ type TcpMonitor struct {
 	retries  int
 }
 
-func (tcp *TcpMonitor) Check(addr string) bool {
+func (tcp *TcpMonitor) Check(ref string, addr string) bool {
+	logger := util.Log.WithFields(log.Fields{
+		"ds": ref,
+	})
 
 	try := 1
 	for tcp.retries == -1 || try <= tcp.retries {
-		util.Log.Infof("TCP Check intento %d/%d", try, tcp.retries)
+		logger.Infof("TCP Check intento %d/%d", try, tcp.retries)
 		conn, err := net.Dial("tcp", addr)
 
 		if err == nil {
-			util.Log.Infoln("Se recibió respuesta del servidor", addr)
+			logger.Infoln("Se recibió respuesta del servidor", addr)
 			conn.Close()
 			return true
 		} else {
-			util.Log.Debugln(err)
+			logger.Debugln(err)
 		}
 
 		try++

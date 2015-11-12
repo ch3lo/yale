@@ -298,7 +298,7 @@ func (ds *DockerService) RunSmokeTest(monitor monitor.Monitor) {
 		return
 	}
 
-	result := monitor.Check(addr)
+	result := monitor.Check(ds.GetId(), addr)
 
 	ds.log.Infof("Se terminó el Smoke Test con estado %t", result)
 
@@ -326,7 +326,7 @@ func (ds *DockerService) RunWarmUp(monitor monitor.Monitor) {
 		return
 	}
 
-	result := monitor.Check(addr)
+	result := monitor.Check(ds.GetId(), addr)
 
 	ds.log.Infof("Se terminó el Warm UP con estado %t", result)
 

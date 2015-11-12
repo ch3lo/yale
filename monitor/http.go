@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/ch3lo/yale/util"
 )
 
@@ -15,7 +16,10 @@ type HttpMonitor struct {
 	retries  int
 }
 
-func (h *HttpMonitor) Check(addr string) bool {
+func (h *HttpMonitor) Check(ref string, addr string) bool {
+	logger := util.Log.WithFields(log.Fields{
+		"ds": ref,
+	})
 
 	healthyEndpoint := "http://" + addr + h.request
 
@@ -23,28 +27,28 @@ func (h *HttpMonitor) Check(addr string) bool {
 
 	try := 1
 	for h.retries == -1 || try <= h.retries {
-		util.Log.Infof("HTTP Check intento %d/%d", try, h.retries)
+		logger.Infof("HTTP Check intento %d/%d", try, h.retries)
 		resp, err := http.Get(healthyEndpoint)
 		if err == nil {
-			util.Log.Debugf("Se recibió respuesta del servidor con estado %d", resp.StatusCode)
+			logger.Debugf("Se recibió respuesta del servidor con estado %d", resp.StatusCode)
 
 			if resp.StatusCode == 200 {
-				util.Log.Debugln("Verificando la respuesta ...")
+				logger.Debugln("Verificando la respuesta ...")
 				body, _ := ioutil.ReadAll(resp.Body)
 
 				result := false
 				if expected.MatchString(string(body)) {
-					util.Log.Infoln("Respuesta OK")
+					logger.Infoln("Respuesta OK")
 					result = true
 				} else {
-					util.Log.Warnf("Respuesta con error %s", string(body))
+					logger.Warnf("Respuesta con error %s", string(body))
 				}
 
 				resp.Body.Close()
 				return result
 			}
 		} else {
-			util.Log.Debugln(err)
+			logger.Debugln(err)
 		}
 
 		try++
