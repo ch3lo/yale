@@ -36,7 +36,7 @@ type MonitorConfig struct {
 }
 
 type Monitor interface {
-	Check(addr string) bool
+	Check(ref string, addr string) bool
 	SetRequest(ep string)
 	SetExpected(ex string)
 	SetRetries(retries int)
