@@ -242,11 +242,12 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 	return false
 }
 
-func (s *Stack) LoadFilteredContainers(imageNameFilter string, containerNameFilter string) error {
+func (s *Stack) LoadFilteredContainers(imageNameFilter string, tagFilter string, containerNameFilter string) error {
 	util.Log.Debugf("Loading containers with image name filter: %s - container name filter %s", imageNameFilter, containerNameFilter)
 	filter := helper.NewContainerFilter()
 	//filter.GetStep() = []string{"running"}
 	filter.ImageRegexp = imageNameFilter
+	filter.TagRegexp = tagFilter
 	filter.NameRegexp = containerNameFilter
 
 	containers, err := s.dockerApiHelper.ListContainers(filter)

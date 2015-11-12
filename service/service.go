@@ -221,13 +221,13 @@ func (ds *DockerService) Undeploy() {
 	}
 
 	if ds.container == nil || ds.container.ID == "" {
-		ds.log.Warnf("Container Instance not found")
+		ds.log.Warnln("Container Instance not found")
 		return
 	}
 
 	err := ds.dockerCli().UndeployContainer(ds.container.ID, true, 10)
 	if err != nil {
-		ds.log.Errorln("No se pudo remover el contenedor", err)
+		ds.log.Warnln("No se pudo remover el contenedor", err)
 		return
 	}
 	ds.setState(UNDEPLOYED)

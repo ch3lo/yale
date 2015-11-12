@@ -17,13 +17,16 @@ type containerFilter struct {
 	NameRegexp  string
 	Status      []string
 	ImageRegexp string
+	TagRegexp   string
 }
 
 func NewContainerFilter() *containerFilter {
 	return &containerFilter{
 		Status:      []string{"restarting", "running", "paused", "exited"},
 		NameRegexp:  ".*",
-		ImageRegexp: ".*"}
+		ImageRegexp: ".*",
+		TagRegexp:   ".*",
+	}
 }
 
 type DockerHelper struct {
@@ -114,7 +117,7 @@ func (dh *DockerHelper) ListContainers(filter *containerFilter) ([]docker.APICon
 	}
 
 	var validName = regexp.MustCompile(filter.NameRegexp)
-	var validImage = regexp.MustCompile(filter.ImageRegexp)
+	var validImage = regexp.MustCompile(filter.ImageRegexp + ":" + filter.TagRegexp)
 
 	var filteredContainers []docker.APIContainers
 	for _, container := range containers {
@@ -181,7 +184,15 @@ func (dh *DockerHelper) CreateAndRun(containerOpts docker.CreateContainerOptions
 	util.Log.Infoln("Starting container", container.ID)
 	err = dh.client.StartContainer(container.ID, nil)
 	if err != nil {
-		return nil, err
+		switch err.(type) {
+		case NoSuchContainer:
+			return nil, err
+		case ContainerAlreadyRunning:
+			util.Log.Infof("Container %s already running", containerId)
+			break
+		default:
+			return nil, err
+		}
 	}
 
 	util.Log.Infoln("Inspecting container", container.Name)
@@ -234,8 +245,18 @@ func (dh *DockerHelper) UndeployContainer(containerId string, remove bool, timeo
 
 	util.Log.Infoln("Stopping container", containerId)
 	err = dh.client.StopContainer(containerId, timeout)
+
 	if err != nil {
-		return err
+		switch err.(type) {
+		case NoSuchContainer:
+			util.Log.Infoln("No such container", containerId)
+			return nil
+		case ContainerNotRunning:
+			util.Log.Infof("Container %s is not running", containerId)
+			break
+		default:
+			return err
+		}
 	}
 
 	if remove {

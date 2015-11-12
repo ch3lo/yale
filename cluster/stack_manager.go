@@ -44,7 +44,7 @@ func (sm *StackManager) AppendStack(dh *helper.DockerHelper) {
 
 func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, smokeConfig monitor.MonitorConfig, warmConfig monitor.MonitorConfig, instances int, tolerance float64) bool {
 	for stackKey, _ := range sm.stacks {
-		if err := sm.stacks[stackKey].LoadFilteredContainers(serviceConfig.ImageName+":"+serviceConfig.Tag, ".*"); err != nil {
+		if err := sm.stacks[stackKey].LoadFilteredContainers(serviceConfig.ImageName, serviceConfig.Tag, ".*"); err != nil {
 			return false
 		}
 	}
@@ -74,9 +74,9 @@ func (sm *StackManager) DeployedContainers() []*service.DockerService {
 	return containers
 }
 
-func (sm *StackManager) SearchContainers(imageNameFilter string, containerNameFilter string) (map[string][]*service.DockerService, error) {
+func (sm *StackManager) SearchContainers(imageNameFilter string, tagFilter string, containerNameFilter string) (map[string][]*service.DockerService, error) {
 	for stackKey, _ := range sm.stacks {
-		if err := sm.stacks[stackKey].LoadFilteredContainers(imageNameFilter, containerNameFilter); err != nil {
+		if err := sm.stacks[stackKey].LoadFilteredContainers(imageNameFilter, tagFilter, containerNameFilter); err != nil {
 			return nil, err
 		}
 	}
