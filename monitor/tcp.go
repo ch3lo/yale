@@ -17,11 +17,11 @@ func (tcp *TcpMonitor) Check(addr string) bool {
 
 	try := 1
 	for tcp.retries == -1 || try <= tcp.retries {
-		util.Log.Infof("TCP Check attempt %d/%d", try, tcp.retries)
+		util.Log.Infof("TCP Check intento %d/%d", try, tcp.retries)
 		conn, err := net.Dial("tcp", addr)
 
 		if err == nil {
-			util.Log.Infof("Response from %s ... OK", addr)
+			util.Log.Infoln("Se recibió respuesta del servidor", addr)
 			conn.Close()
 			return true
 		} else {

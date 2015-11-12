@@ -90,7 +90,7 @@ func deployFlags() []cli.Flag {
 			Usage: "Define si el smoke test es TCP o HTTP",
 		},
 		cli.StringFlag{
-			Name:  "smoke-ping",
+			Name:  "smoke-request",
 			Usage: "Información necesaria para el request",
 		},
 		cli.StringFlag{
@@ -99,7 +99,7 @@ func deployFlags() []cli.Flag {
 			Usage: "Valor esperado en el smoke test para definir la prueba como exitosa. Es una expresión regular.",
 		},
 		cli.StringFlag{
-			Name:  "warmup-ping",
+			Name:  "warmup-request",
 			Usage: "Enpoint que se utilizará para hacer el calentamiento del servicio",
 		},
 		cli.StringFlag{
@@ -119,7 +119,7 @@ func deployBefore(c *cli.Context) error {
 		return errors.New("El TAG de la imagen esta vacio")
 	}
 
-	if c.String("smoke-ping") == "" {
+	if c.String("smoke-request") == "" {
 		return errors.New("El endpoint de Smoke Test esta vacio")
 	}
 
@@ -133,7 +133,7 @@ func deployBefore(c *cli.Context) error {
 }
 
 func callbackNotification(callbackUrl string, callbackJob string, token string, resume []callbackResume) {
-	util.Log.Infof("Senting notification to %s", callbackUrl)
+	util.Log.Infof("Se enviará una notificacion a %s", callbackUrl)
 
 	jsonResume, err := json.Marshal(resume)
 	if err != nil {
@@ -146,7 +146,7 @@ func callbackNotification(callbackUrl string, callbackJob string, token string, 
 	data.Set("token", token)
 	data.Set("services", string(jsonResume))
 
-	util.Log.Debugf("Notificaion data: %s", data.Encode())
+	util.Log.Debugf("Datos de la notificación: %s", data.Encode())
 
 	req, err := http.NewRequest("POST", callbackUrl, bytes.NewBufferString(data.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -154,13 +154,13 @@ func callbackNotification(callbackUrl string, callbackJob string, token string, 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		util.Log.Errorf("Notification problem %s", err)
+		util.Log.Warnf("Request de la notificación tuvo el error %s", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	body, _ := ioutil.ReadAll(resp.Body)
-	util.Log.Infof("Notification Status %d with response %s", resp.StatusCode, string(body))
+	util.Log.Infof("Notificacion con estatus %d y respuesta %s", resp.StatusCode, string(body))
 }
 
 type callbackResume struct {
@@ -189,22 +189,22 @@ func deployCmd(c *cli.Context) {
 	smokeConfig := monitor.MonitorConfig{
 		Retries: c.Int("smoke-retries"),
 		Type:    monitor.GetMonitor(c.String("smoke-type")),
-		Ping:    c.String("smoke-ping"),
+		Ping:    c.String("smoke-request"),
 		Pong:    c.String("smoke-expected"),
 	}
 
 	warmUpConfig := monitor.MonitorConfig{
 		Retries: 1,
 		Type:    monitor.HTTP,
-		Ping:    c.String("warmup-ping"),
+		Ping:    c.String("warmup-request"),
 		Pong:    c.String("warmup-expected"),
 	}
 
-	util.Log.Debugf("Service Configuration: %#v", serviceConfig.String())
+	util.Log.Debugf("La configuración del servicio es: %#v", serviceConfig.String())
 
 	handleDeploySigTerm(stackManager)
 	if stackManager.Deploy(serviceConfig, smokeConfig, warmUpConfig, c.Int("instances"), c.Float64("tolerance")) {
-		fmt.Println("Proceso de deploy ok")
+		fmt.Println("Proceso de deploy OK")
 		services := stackManager.DeployedContainers()
 		var resume []callbackResume
 
@@ -212,7 +212,7 @@ func deployCmd(c *cli.Context) {
 			if addr, err := services[k].AddressAndPort(8080); err != nil {
 				util.Log.Errorln(err)
 			} else {
-				util.Log.Infof("Deployed %s with registrator tag %s , addr %s", services[k].GetId(), services[k].RegistratorId(), addr)
+				util.Log.Infof("Se desplegó %s con el tag de registrator %s y dirección %s", services[k].GetId(), services[k].RegistratorId(), addr)
 				containerInfo := callbackResume{
 					RegisterId: services[k].RegistratorId(),
 					Address:    addr,
@@ -227,6 +227,6 @@ func deployCmd(c *cli.Context) {
 			util.Log.Warnln("No existen parametros de callback")
 		}
 	} else {
-		util.Log.Fatalln("Proceso de deploy con problema")
+		util.Log.Fatalln("Proceso de deploy con errores")
 	}
 }

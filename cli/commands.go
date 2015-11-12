@@ -18,4 +18,11 @@ var commands = []cli.Command{
 		Flags:   listFlags(),
 		Action:  listCmd,
 	},
+	{
+		Name:    "filter",
+		Aliases: []string{"f"},
+		Usage:   "[WIP] Filtra contenedores",
+		Flags:   filterFlags(),
+		Action:  filterCmd,
+	},
 }

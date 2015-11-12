@@ -68,7 +68,7 @@ func (s *ServiceConfig) Version() string {
 	rp := regexp.MustCompile("^([\\d\\.]+)-")
 	result := rp.FindStringSubmatch(s.Tag)
 	if result == nil {
-		util.Log.Fatalln("Invalid TAG format")
+		util.Log.Fatalln("Formato de TAG invalido")
 	}
 	return result[1]
 }
@@ -99,7 +99,7 @@ func NewDockerService(id string, dh *helper.DockerHelper, sc chan<- string) *Doc
 		"ds": ds.id,
 	})
 
-	ds.log.Infof("Setting Up Service")
+	ds.log.Infof("Se configuró el Servicio de Docker")
 
 	return ds
 }
@@ -134,7 +134,7 @@ func (ds *DockerService) bindPort(publish []string) map[docker.Port][]docker.Por
 	portBindings := map[docker.Port][]docker.PortBinding{}
 
 	for _, v := range publish {
-		ds.log.Debugln("Processing Port", v)
+		ds.log.Debugln("Procesando el bindeo del puerto", v)
 		var dp docker.Port
 		reflect.ValueOf(&dp).Elem().SetString(v)
 		portBindings[dp] = []docker.PortBinding{docker.PortBinding{}}
@@ -204,24 +204,25 @@ func (ds *DockerService) Run(serviceConfig ServiceConfig) {
 	ds.container, err = ds.dockerCli().CreateAndRun(opts)
 
 	if err != nil {
-		ds.log.Errorf("Container Run with error: %s", err)
+		ds.log.Errorf("Se produjo un error al arrancar el contenedor: %s", err)
 		ds.setStep(STEP_FAILED)
 		return
 	}
 
-	ds.log.Debugf("Service Registrator ID %s", ds.RegistratorId())
+	ds.log.Debugln("El contenedor arrancó exitosamente")
+	ds.log.Debugf("El contenedor esta asociado al ID de Registrator %s", ds.RegistratorId())
 
 	ds.setStep(STEP_CREATED)
 }
 
 func (ds *DockerService) Undeploy() {
 	if ds.CheckState(UNDEPLOYED) {
-		ds.log.Infoln("Service was undeployed")
+		ds.log.Infoln("El servicio ya se habia removido (undeployed)")
 		return
 	}
 
 	if ds.container == nil || ds.container.ID == "" {
-		ds.log.Warnln("Container Instance not found")
+		ds.log.Warnln("El servicio no esta asociado a un contenedor")
 		return
 	}
 
@@ -260,7 +261,7 @@ func (ds *DockerService) PublicPorts() map[int64]int64 {
 	ports := make(map[int64]int64)
 	ds.log.Debugf("Api Ports %#v", ds.container.NetworkSettings.PortMappingAPI())
 	for _, val := range ds.container.NetworkSettings.PortMappingAPI() {
-		ds.log.Debugf("Private Port [%d] Public Port [%d]", val.PrivatePort, val.PublicPort)
+		ds.log.Debugf("Puerto privado [%d] Puerto publico [%d]", val.PrivatePort, val.PublicPort)
 		if val.PrivatePort != 0 && val.PublicPort != 0 {
 			ports[val.PrivatePort] = val.PublicPort
 		}
@@ -273,15 +274,15 @@ func (ds *DockerService) AddressAndPort(internalPort int64) (string, error) {
 
 	ds.log.Debugf("Api Ports %#v", ds.container.NetworkSettings.PortMappingAPI())
 	for _, val := range ds.container.NetworkSettings.PortMappingAPI() {
-		ds.log.Debugln("Private Port", val.PrivatePort, "Public Port", val.PublicPort)
+		ds.log.Debugf("Puerto privado [%d] Puerto publico [%d]", val.PrivatePort, val.PublicPort)
 		if val.PrivatePort == internalPort {
 			addr := val.IP + ":" + strconv.FormatInt(val.PublicPort, 10)
-			ds.log.Debugf("Calculated Addr %s", addr)
+			ds.log.Debugf("La dirección calculada del servicio es %s", addr)
 			return addr, nil
 		}
 	}
 
-	return "", errors.New(fmt.Sprintf("Unknown port %d", internalPort))
+	return "", errors.New(fmt.Sprintf("Puerto %s desconocido", internalPort))
 }
 
 func (ds *DockerService) RunSmokeTest(monitor monitor.Monitor) {
@@ -297,7 +298,7 @@ func (ds *DockerService) RunSmokeTest(monitor monitor.Monitor) {
 
 	result := monitor.Check(addr)
 
-	ds.log.Infof("Smoke Test status %t", result)
+	ds.log.Infof("Se terminó el Smoke Test con estado %t", result)
 
 	if result {
 		ds.setStep(STEP_SMOKE_READY)
@@ -308,7 +309,7 @@ func (ds *DockerService) RunSmokeTest(monitor monitor.Monitor) {
 
 func (ds *DockerService) RunWarmUp(monitor monitor.Monitor) {
 	if !monitor.Configured() {
-		ds.log.Infoln("Service, doesn't have Warm Up. Skiping")
+		ds.log.Infoln("El servicio no tiene configurado Warm UP. Se saltará esta validación")
 		ds.setStep(STEP_WARM_READY)
 		return
 	}
@@ -325,7 +326,7 @@ func (ds *DockerService) RunWarmUp(monitor monitor.Monitor) {
 
 	result := monitor.Check(addr)
 
-	ds.log.Infof("Warm Up status %t", result)
+	ds.log.Infof("Se terminó el Warm UP con estado %t", result)
 
 	if result {
 		ds.setStep(STEP_WARM_READY)

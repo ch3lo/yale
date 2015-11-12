@@ -136,6 +136,7 @@ func (s *Stack) undeployInstance(serviceId string) {
 }
 
 func (s *Stack) Rollback() {
+	s.log.Infof("Starting Rollback in the stack")
 	for _, srv := range s.services {
 		if !srv.Loaded() {
 			s.undeployInstance(srv.GetId())
