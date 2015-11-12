@@ -91,7 +91,7 @@ func (s *Stack) DeployCheckAndNotify(serviceConfig service.ServiceConfig, smokeC
 		s.log.Infoln("El Stack ya estaba desplegado. Omitiendo...")
 		s.setStatus(STACK_READY)
 	} else if currentContainers < instances {
-		diff := currentContainers - instances
+		diff := instances - currentContainers
 		s.log.Printf("El Stack tenia %d instancias. Se desplegaran %d instancias más.", currentContainers, diff)
 		s.smokeTestMonitor = s.createMonitor(smokeConfig)
 		s.warmUpMonitor = s.createMonitor(warmConfig)
