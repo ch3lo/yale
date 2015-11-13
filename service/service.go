@@ -240,6 +240,7 @@ func (ds *DockerService) Undeploy() {
 		ds.log.Warnln("No se pudo remover el contenedor", err)
 		return
 	}
+	ds.log.Infoln("Proceso de undeploy exitoso")
 	ds.setState(UNDEPLOYED)
 }
 

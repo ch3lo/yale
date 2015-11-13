@@ -47,9 +47,9 @@ func deployFlags() []cli.Flag {
 			Usage: "Puerto interno del contenedor a exponer en el Host",
 		},
 		cli.IntFlag{
-			Name:  "cpu-shares",
-			Value: 1024,
-			Usage: "Proporcion de CPU asignado al servicio relativo a los otros servicios corriendo en la maquina. Mas info 'man docker-run' cpu-shares.",
+			Name:  "cpu",
+			Value: 0,
+			Usage: "Cantidad de CPU reservadas para el servicio.",
 		},
 		cli.StringFlag{
 			Name:  "memory",
@@ -197,7 +197,7 @@ func deployCmd(c *cli.Context) {
 	}
 
 	serviceConfig := service.ServiceConfig{
-		CpuShares: c.Int("cpu-shares"),
+		CpuShares: c.Int("cpu"),
 		Envs:      envs,
 		ImageName: c.String("image"),
 		Publish:   []string{"8080/tcp"}, // TODO desplegar puertos que no sean 8080
