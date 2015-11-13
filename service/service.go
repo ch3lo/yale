@@ -58,10 +58,12 @@ func (s State) String() string {
 }
 
 type ServiceConfig struct {
-	ImageName string
-	Tag       string
+	CpuShares int
 	Envs      []string
+	ImageName string
+	Memory    int64
 	Publish   []string
+	Tag       string
 }
 
 func (s *ServiceConfig) Version() string {
@@ -74,7 +76,7 @@ func (s *ServiceConfig) Version() string {
 }
 
 func (s *ServiceConfig) String() string {
-	return fmt.Sprintf("ImageName: %s - Tag: %s - Envs - %s - Publish: %#v", s.ImageName, s.Tag, util.MaskEnv(s.Envs), s.Publish)
+	return fmt.Sprintf("ImageName: %s - Tag: %s - CpuShares: %d - Memory: %s - Publish: %#v - Envs: %s", s.ImageName, s.Tag, s.CpuShares, s.Memory, s.Publish, util.MaskEnv(s.Envs))
 }
 
 type DockerService struct {
@@ -192,9 +194,14 @@ func (ds *DockerService) Run(serviceConfig ServiceConfig) {
 
 	dockerHostConfig := docker.HostConfig{
 		Binds:           []string{"/var/log/service/:/var/log/service/"},
+		CPUShares:       int64(serviceConfig.CpuShares),
 		PortBindings:    ds.bindPort(serviceConfig.Publish),
 		PublishAllPorts: false,
 		Privileged:      false,
+	}
+
+	if serviceConfig.Memory != 0 {
+		dockerHostConfig.Memory = serviceConfig.Memory
 	}
 
 	opts := docker.CreateContainerOptions{

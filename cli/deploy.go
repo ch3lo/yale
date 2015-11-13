@@ -17,6 +17,7 @@ import (
 	"github.com/ch3lo/yale/service"
 	"github.com/ch3lo/yale/util"
 	"github.com/codegangsta/cli"
+	"github.com/pivotal-golang/bytefmt"
 )
 
 func handleDeploySigTerm(sm *cluster.StackManager) {
@@ -44,6 +45,15 @@ func deployFlags() []cli.Flag {
 			Name:  "port",
 			Value: &cli.StringSlice{"8080"},
 			Usage: "Puerto interno del contenedor a exponer en el Host",
+		},
+		cli.IntFlag{
+			Name:  "cpu-shares",
+			Value: 1024,
+			Usage: "Proporcion de CPU asignado al servicio relativo a los otros servicios corriendo en la maquina. Mas info 'man docker-run' cpu-shares.",
+		},
+		cli.StringFlag{
+			Name:  "memory",
+			Usage: "Cantidad de memoria principal (Unidades: M, m, MB, mb, GB, G) que puede utilizar el servicio. Mas info 'man docker-run' memory.",
 		},
 		cli.StringSliceFlag{
 			Name:  "env-file",
@@ -123,6 +133,13 @@ func deployBefore(c *cli.Context) error {
 		return errors.New("El endpoint de Smoke Test esta vacio")
 	}
 
+	if c.String("memory") != "" {
+		if _, err := bytefmt.ToMegabytes(c.String("memory")); err != nil {
+			return errors.New("Valor del parámetro memory invalido")
+		}
+
+	}
+
 	for _, file := range c.StringSlice("env-file") {
 		if err := util.FileExists(file); err != nil {
 			return errors.New(fmt.Sprintf("El archivo %s con variables de entorno no existe", file))
@@ -180,10 +197,17 @@ func deployCmd(c *cli.Context) {
 	}
 
 	serviceConfig := service.ServiceConfig{
-		ImageName: c.String("image"),
-		Tag:       c.String("tag"),
+		CpuShares: c.Int("cpu-shares"),
 		Envs:      envs,
+		ImageName: c.String("image"),
 		Publish:   []string{"8080/tcp"}, // TODO desplegar puertos que no sean 8080
+		Tag:       c.String("tag"),
+	}
+
+	if c.String("memory") != "" {
+		mebabytes, _ := bytefmt.ToMegabytes(c.String("memory"))
+		memory := mebabytes * 1024
+		serviceConfig.Memory = int64(memory)
 	}
 
 	smokeConfig := monitor.MonitorConfig{
