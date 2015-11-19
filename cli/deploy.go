@@ -205,8 +205,8 @@ func deployCmd(c *cli.Context) {
 	}
 
 	if c.String("memory") != "" {
-		mebabytes, _ := bytefmt.ToMegabytes(c.String("memory"))
-		memory := mebabytes * 1024
+		megabytes, _ := bytefmt.ToMegabytes(c.String("memory"))
+		memory := megabytes * 1024 * 1024
 		serviceConfig.Memory = int64(memory)
 	}
 
