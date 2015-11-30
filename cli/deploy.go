@@ -1,13 +1,9 @@
 package cli
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -75,20 +71,6 @@ func deployFlags() []cli.Flag {
 				"Este valor es respecto al total de instancias." +
 				"Por ejemplo, si se despliegan 5 servicios y fallan ",
 		},
-		cli.StringFlag{
-			Name:   "callback-url",
-			Value:  "https://jenkinsdomain.com/buildByToken/buildWithParameters",
-			Usage:  "URL donde se realizará el callback en caso de despliegue exitoso",
-			EnvVar: "DEPLOYER_CALLBACK_URL",
-		},
-		cli.StringFlag{
-			Name:  "callback-job",
-			Usage: "Nombre del job de Jenkins donde se realizará la notificacion",
-		},
-		cli.StringFlag{
-			Name:  "callback-token",
-			Usage: "Token de seguridad que se utilizará en el callback",
-		},
 		cli.IntFlag{
 			Name:  "smoke-retries",
 			Value: 10,
@@ -149,37 +131,6 @@ func deployBefore(c *cli.Context) error {
 	return nil
 }
 
-func callbackNotification(callbackUrl string, callbackJob string, token string, resume []callbackResume) {
-	util.Log.Infof("Se enviará una notificacion a %s", callbackUrl)
-
-	jsonResume, err := json.Marshal(resume)
-	if err != nil {
-		util.Log.Errorf("No se pudo procesar %s", resume, err)
-		return
-	}
-
-	data := url.Values{}
-	data.Set("job", callbackJob)
-	data.Set("token", token)
-	data.Set("services", string(jsonResume))
-
-	util.Log.Debugf("Datos de la notificación: %s", data.Encode())
-
-	req, err := http.NewRequest("POST", callbackUrl, bytes.NewBufferString(data.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		util.Log.Warnf("Request de la notificación tuvo el error %s", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	util.Log.Infof("Notificacion con estatus %d y respuesta %s", resp.StatusCode, string(body))
-}
-
 type callbackResume struct {
 	RegisterId string `json:"RegisterId"`
 	Address    string `json:"Address"`
@@ -228,7 +179,6 @@ func deployCmd(c *cli.Context) {
 
 	handleDeploySigTerm(stackManager)
 	if stackManager.Deploy(serviceConfig, smokeConfig, warmUpConfig, c.Int("instances"), c.Float64("tolerance")) {
-		fmt.Println("Proceso de deploy OK")
 		services := stackManager.DeployedContainers()
 		var resume []callbackResume
 
@@ -245,11 +195,9 @@ func deployCmd(c *cli.Context) {
 			}
 		}
 
-		if c.String("callback-job") != "" && c.String("callback-token") != "" {
-			callbackNotification(c.String("callback-url"), c.String("callback-job"), c.String("callback-token"), resume)
-		} else {
-			util.Log.Warnln("No existen parametros de callback")
-		}
+		jsonResume, _ := json.Marshal(resume)
+
+		fmt.Println(string(jsonResume))
 	} else {
 		util.Log.Fatalln("Proceso de deploy con errores")
 	}

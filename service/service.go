@@ -111,6 +111,7 @@ func NewFromContainer(id string, dh *helper.DockerHelper, container *docker.Cont
 	ds.container = container
 	ds.loaded = true
 
+	ds.log.Infof("Se configuró desde el contenedor %s", ds.container.Name)
 	return ds
 }
 

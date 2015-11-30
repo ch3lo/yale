@@ -203,6 +203,7 @@ func (dh *DockerHelper) CreateAndRun(containerOpts docker.CreateContainerOptions
 }
 
 func (dh *DockerHelper) ContainerInspect(containerId string) (*docker.Container, error) {
+	util.Log.Debugln("Inspeccionando contenedor", containerId)
 	container, err := dh.client.InspectContainer(containerId)
 	if err != nil {
 		return nil, err
@@ -268,14 +269,3 @@ func (dh *DockerHelper) UndeployContainer(containerId string, remove bool, timeo
 
 	return nil
 }
-
-/*
-func ContainerStatus(containerId string) docker.State {
-	container, err := client.InspectContainer(containerId)
-	if err != nil {
-		return docker.State.Error
-	}
-
-	return container.State
-}
-*/
