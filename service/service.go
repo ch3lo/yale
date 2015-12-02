@@ -31,7 +31,7 @@ const (
 var step = [...]string{
 	"STEP_CREATED",
 	"STEP_SMOKE_READY",
-	"STEP_WARM_UP",
+	"STEP_WARM_READY",
 	"STEP_FAILED",
 }
 

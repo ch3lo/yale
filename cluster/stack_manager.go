@@ -65,6 +65,7 @@ func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, smokeConfig 
 			return false
 		}
 	}
+	util.Log.Infoln("Proceso de deploy OK")
 	return true
 }
 
