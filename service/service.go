@@ -58,6 +58,7 @@ func (s State) String() string {
 }
 
 type ServiceConfig struct {
+	ServiceId string
 	CpuShares int
 	Envs      []string
 	ImageName string
@@ -193,12 +194,24 @@ func (ds *DockerService) Run(serviceConfig ServiceConfig) {
 		Labels: labels,
 	}
 
+	sourcetype := "{{.Name}}"
+	if serviceConfig.ServiceId != "" {
+		sourcetype = serviceConfig.ServiceId
+	}
+
 	dockerHostConfig := docker.HostConfig{
 		Binds:           []string{"/var/log/service/:/var/log/service/"},
 		CPUShares:       int64(serviceConfig.CpuShares),
 		PortBindings:    ds.bindPort(serviceConfig.Publish),
 		PublishAllPorts: false,
 		Privileged:      false,
+		LogConfig: docker.LogConfig{
+			Type: "syslog",
+			Config: map[string]string{
+				"tag":             fmt.Sprintf("{{.ImageName}}|%s|{{.ID}}", sourcetype),
+				"syslog-facility": "local1",
+			},
+		},
 	}
 
 	if serviceConfig.Memory != 0 {

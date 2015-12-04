@@ -30,6 +30,10 @@ func handleDeploySigTerm(sm *cluster.StackManager) {
 func deployFlags() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{
+			Name:  "service-id",
+			Usage: "Id del servicio",
+		},
+		cli.StringFlag{
 			Name:  "image",
 			Usage: "Nombre de la imagen",
 		},
@@ -148,6 +152,7 @@ func deployCmd(c *cli.Context) {
 	}
 
 	serviceConfig := service.ServiceConfig{
+		ServiceId: c.String("service-id"),
 		CpuShares: c.Int("cpu"),
 		Envs:      envs,
 		ImageName: c.String("image"),
