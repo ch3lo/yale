@@ -3,51 +3,46 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
+
+	"gopkg.in/yaml.v2"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/ch3lo/yale/cluster"
-	"github.com/ch3lo/yale/helper"
+	"github.com/ch3lo/yale/configuration"
 	"github.com/ch3lo/yale/util"
 	"github.com/ch3lo/yale/version"
 	"github.com/codegangsta/cli"
 )
 
 var stackManager *cluster.StackManager
-var logFile *os.File = nil
+var logFile *os.File
 
 type logConfig struct {
-	LogLevel     string
-	LogFormatter string
-	LogColored   bool
-	LogOutput    string
+	level     string
+	Formatter string
+	colored   bool
+	output    string
+	debug     bool
 }
 
-func dockerCfgPath() string {
-	p := path.Join(os.Getenv("HOME"), ".docker", "config.json")
-	if err := util.FileExists(p); err != nil {
-		p = path.Join(os.Getenv("HOME"), ".dockercfg")
-	}
-
-	return p
-}
-
-func setupLogger(debug bool, config logConfig) error {
+func setupLogger(config logConfig) error {
 	var err error
 
-	if util.Log.Level, err = log.ParseLevel(config.LogLevel); err != nil {
+	if util.Log.Level, err = log.ParseLevel(config.level); err != nil {
 		return err
 	}
 
-	if debug {
+	if config.debug {
 		util.Log.Level = log.DebugLevel
 	}
 
-	switch config.LogFormatter {
+	switch config.Formatter {
 	case "text":
 		formatter := new(log.TextFormatter)
-		formatter.ForceColors = config.LogColored
+		formatter.ForceColors = config.colored
 		formatter.FullTimestamp = true
 		util.Log.Formatter = formatter
 		break
@@ -59,7 +54,7 @@ func setupLogger(debug bool, config logConfig) error {
 		return errors.New("Formato de lo log desconocido")
 	}
 
-	switch config.LogOutput {
+	switch config.output {
 	case "console":
 		util.Log.Out = os.Stdout
 		break
@@ -79,48 +74,10 @@ func globalFlags() []cli.Flag {
 			Name:  "debug",
 			Usage: "Modo de verbosidad debug",
 		},
-		cli.StringSliceFlag{
-			Name:   "endpoint, ep",
-			Usage:  "Endpoint de la API de Docker",
-			EnvVar: "DOCKER_HOST",
-		},
-		cli.BoolFlag{
-			Name:  "tls",
-			Usage: "Utiliza TLS en la comunicacion con los Endpoints",
-		},
-		cli.BoolFlag{
-			Name:   "tlsverify",
-			Usage:  "Utiliza TLS Verify en la comunicacion con los Endpoints",
-			EnvVar: "DOCKER_TLS_VERIFY",
-		},
 		cli.StringFlag{
-			Name:   "cert_path",
-			Usage:  "Directorio con los certificados",
-			EnvVar: "DOCKER_CERT_PATH",
-		},
-		cli.StringFlag{
-			Name:   "tlscacert",
-			Value:  "ca.pem",
-			Usage:  "Ruta relativa del archivo con el certificado CA",
-			EnvVar: "DEPLOYER_CERT_CA",
-		},
-		cli.StringFlag{
-			Name:   "tlscert",
-			Value:  "cert.pem",
-			Usage:  "Ruta relativa del arhivo con el certificado cliente",
-			EnvVar: "DEPLOYER_CERT_CERT",
-		},
-		cli.StringFlag{
-			Name:   "tlskey",
-			Value:  "key.pem",
-			Usage:  "Ruta relativa del arhivo con la llave del certificado cliente",
-			EnvVar: "DEPLOYER_CERT_KEY",
-		},
-		cli.StringFlag{
-			Name:   "auth-file",
-			Value:  dockerCfgPath(),
-			Usage:  "Archivo de configuracion de la autenticacion",
-			EnvVar: "DEPLOYER_AUTH_CONFIG",
+			Name:  "config",
+			Value: "yale.yml",
+			Usage: "Ruta del archivo de configuración",
 		},
 		cli.StringFlag{
 			Name:   "log-level",
@@ -141,7 +98,7 @@ func globalFlags() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:   "log-output",
-			Value:  "file",
+			Value:  "console",
 			Usage:  "Output de los logs. console | file",
 			EnvVar: "DEPLOYER_LOG_OUTPUT",
 		},
@@ -150,60 +107,54 @@ func globalFlags() []cli.Flag {
 	return flags
 }
 
-func buildCertPath(certPath string, file string) string {
-	if file == "" {
-		return ""
+func setupConfiguration(configFile string) (*configuration.Configuration, error) {
+	_, err := os.Stat(configFile)
+	if os.IsNotExist(err) {
+		return nil, err
 	}
 
-	if certPath != "" {
-		return certPath + "/" + file
+	configFile, err = filepath.Abs(configFile)
+	if err != nil {
+		return nil, err
 	}
 
-	return file
+	var yamlFile []byte
+	if yamlFile, err = ioutil.ReadFile(configFile); err != nil {
+		return nil, err
+	}
+
+	var config configuration.Configuration
+	if err = yaml.Unmarshal(yamlFile, &config); err != nil {
+		return nil, err
+	}
+
+	return &config, nil
 }
 
-func setupGlobalFlags(c *cli.Context) error {
-	var config logConfig = logConfig{}
-	config.LogLevel = c.String("log-level")
-	config.LogFormatter = c.String("log-formatter")
-	config.LogColored = c.Bool("log-colored")
-	config.LogOutput = c.String("log-output")
+func setupApplication(c *cli.Context) error {
+	logConfig := logConfig{}
+	logConfig.level = c.String("log-level")
+	logConfig.Formatter = c.String("log-formatter")
+	logConfig.colored = c.Bool("log-colored")
+	logConfig.output = c.String("log-output")
+	logConfig.debug = c.Bool("debug")
 
-	var err error
-
-	if err = setupLogger(c.Bool("debug"), config); err != nil {
-		fmt.Println("Nivel de log invalido")
+	err := setupLogger(logConfig)
+	if err != nil {
 		return err
 	}
 
-	stackManager = cluster.NewStackManager()
-
-	for _, ep := range c.StringSlice("endpoint") {
-		util.Log.Infof("Configurando el endpoint de Docker %s", ep)
-		var dh *helper.DockerHelper
-		if c.Bool("tlsverify") {
-			ca := buildCertPath(c.String("cert_path"), c.String("tlscacert"))
-			cert := buildCertPath(c.String("cert_path"), c.String("tlscert"))
-			key := buildCertPath(c.String("cert_path"), c.String("tlskey"))
-			dh, err = helper.NewDockerTlsVerifyHelper(ep, c.String("auth-file"), cert, key, ca)
-		} else if c.Bool("tls") {
-			cert := buildCertPath(c.String("cert_path"), c.String("tlscert"))
-			key := buildCertPath(c.String("cert_path"), c.String("tlskey"))
-			dh, err = helper.NewDockerTlsHelper(ep, c.String("auth-file"), cert, key)
-		} else {
-			dh, err = helper.NewDockerHelper(ep, c.String("auth-file"))
-		}
-
-		if err != nil {
-			fmt.Println("No se pudo configurar el endpoint de Docker")
-			return err
-		}
-		stackManager.AppendStack(dh)
+	var appConfig *configuration.Configuration
+	if appConfig, err = setupConfiguration(c.String("config")); err != nil {
+		return err
 	}
 
+	stackManager = cluster.NewStackManager(appConfig)
 	return nil
 }
 
+// RunApp Entrypoint de la Aplicacion.
+// Procesa los comandos y sus argumentos
 func RunApp() {
 
 	app := cli.NewApp()
@@ -214,7 +165,7 @@ func RunApp() {
 	app.Flags = globalFlags()
 
 	app.Before = func(c *cli.Context) error {
-		return setupGlobalFlags(c)
+		return setupApplication(c)
 	}
 
 	app.Commands = commands

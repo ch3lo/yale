@@ -1,8 +1,8 @@
 package cli
 
 import (
+	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/ch3lo/yale/util"
 	"github.com/codegangsta/cli"
@@ -32,8 +32,14 @@ func filterCmd(c *cli.Context) {
 	for stackKey, containers := range stackMap {
 		for _, c := range containers {
 			var ports string
-			for key, val := range c.PublicPorts() {
-				ports = ports + strconv.FormatInt(val, 10) + "->" + strconv.FormatInt(key, 10) + " "
+			for _, port := range c.ServiceInformation().Ports {
+				for _, pub := range port.Publics {
+					if pub == 0 {
+						ports += fmt.Sprintf("%d ", port.Internal)
+					} else {
+						ports += fmt.Sprintf("%d->%d ", pub, port.Internal)
+					}
+				}
 			}
 			data = append(data, []string{stackKey, c.ContainerSwarmNode(), c.ContainerName(), c.ContainerImageName(), c.ContainerState(), ports})
 		}

@@ -5,16 +5,6 @@ import (
 	"os"
 )
 
-func FileExists(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	f.Close()
-
-	return nil
-}
-
 func ParseMultiFileLinesToArray(envFiles []string) ([]string, error) {
 	var envs []string
 

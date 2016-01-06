@@ -1,17 +1,12 @@
 package service
 
 import (
-	"errors"
 	"fmt"
-	"reflect"
-	"regexp"
-	"strconv"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/ch3lo/yale/helper"
 	"github.com/ch3lo/yale/monitor"
+	"github.com/ch3lo/yale/scheduler"
 	"github.com/ch3lo/yale/util"
-	"github.com/fsouza/go-dockerclient"
 )
 
 // Flow CREATED -> SMOKE_READY -> WARM_READY -> [FAILED]
@@ -57,44 +52,21 @@ func (s State) String() string {
 	return state[s-1]
 }
 
-type ServiceConfig struct {
-	ServiceId string
-	CpuShares int
-	Envs      []string
-	ImageName string
-	Memory    int64
-	Publish   []string
-	Tag       string
-}
-
-func (s *ServiceConfig) Version() string {
-	rp := regexp.MustCompile("^([\\d\\.]+)-")
-	result := rp.FindStringSubmatch(s.Tag)
-	if result == nil {
-		util.Log.Fatalln("Formato de TAG invalido")
-	}
-	return result[1]
-}
-
-func (s *ServiceConfig) String() string {
-	return fmt.Sprintf("ImageName: %s - Tag: %s - CpuShares: %d - Memory: %s - Publish: %#v - Envs: %s", s.ImageName, s.Tag, s.CpuShares, s.Memory, s.Publish, util.MaskEnv(s.Envs))
-}
-
 type DockerService struct {
-	id              string
-	loaded          bool
-	state           State
-	step            Step
-	statusChannel   chan<- string
-	dockerApihelper *helper.DockerHelper
-	container       *docker.Container
-	log             *log.Entry
+	id               string
+	loaded           bool
+	state            State
+	step             Step
+	statusChannel    chan<- string
+	clusterScheduler scheduler.Scheduler
+	serviceInfo      *scheduler.ServiceInformation
+	log              *log.Entry
 }
 
-func NewDockerService(id string, dh *helper.DockerHelper, sc chan<- string) *DockerService {
+func NewDockerService(id string, clusterScheduler scheduler.Scheduler, sc chan<- string) *DockerService {
 	ds := new(DockerService)
 	ds.id = id
-	ds.dockerApihelper = dh
+	ds.clusterScheduler = clusterScheduler
 	ds.loaded = false
 	ds.statusChannel = sc
 
@@ -107,12 +79,12 @@ func NewDockerService(id string, dh *helper.DockerHelper, sc chan<- string) *Doc
 	return ds
 }
 
-func NewFromContainer(id string, dh *helper.DockerHelper, container *docker.Container, sc chan<- string) *DockerService {
-	ds := NewDockerService(id, dh, sc)
-	ds.container = container
+func NewFromContainer(id string, scheduler scheduler.Scheduler, info *scheduler.ServiceInformation, sc chan<- string) *DockerService {
+	ds := NewDockerService(id, scheduler, sc)
+	ds.serviceInfo = info
 	ds.loaded = true
 
-	ds.log.Infof("Se configuró desde el contenedor %s", ds.container.Name)
+	ds.log.Infof("Se configuró desde el contenedor %s", ds.serviceInfo.ID)
 	return ds
 }
 
@@ -120,33 +92,12 @@ func (ds *DockerService) GetId() string {
 	return ds.id
 }
 
+func (ds *DockerService) ServiceInformation() *scheduler.ServiceInformation {
+	return ds.serviceInfo
+}
+
 func (ds *DockerService) RegistratorId() string {
-	return ds.container.Node.Name + ":" + ds.container.Name[1:] + ":8080"
-}
-
-func (ds *DockerService) dockerCli() *helper.DockerHelper {
-	dh := ds.dockerApihelper
-	if dh == nil {
-		ds.setStep(STEP_FAILED)
-		return nil
-	}
-
-	return dh
-}
-
-func (ds *DockerService) bindPort(publish []string) map[docker.Port][]docker.PortBinding {
-	portBindings := map[docker.Port][]docker.PortBinding{}
-
-	for _, v := range publish {
-		ds.log.Debugln("Procesando el bindeo del puerto", v)
-		var dp docker.Port
-		reflect.ValueOf(&dp).Elem().SetString(v)
-		portBindings[dp] = []docker.PortBinding{docker.PortBinding{}}
-	}
-
-	ds.log.Debugf("PortBindings %#v", portBindings)
-
-	return portBindings
+	return ds.ContainerSwarmNode() + ":" + ds.ContainerName() + ":8080"
 }
 
 func (ds *DockerService) setStep(status Step) {
@@ -164,14 +115,8 @@ func (ds *DockerService) setState(state State) {
 }
 
 func (ds *DockerService) CheckState(state State) bool {
-	if ds.container == nil {
-		return false
-	}
-
 	if state == RUNNING {
-		return (ds.container.State.Running &&
-			!ds.container.State.Paused &&
-			!ds.container.State.Restarting)
+		return ds.serviceInfo.Status == scheduler.ServiceUp
 	}
 
 	if state == UNDEPLOYED && ds.state == UNDEPLOYED {
@@ -181,49 +126,11 @@ func (ds *DockerService) CheckState(state State) bool {
 	return false
 }
 
-func (ds *DockerService) Run(serviceConfig ServiceConfig) {
+func (ds *DockerService) Run(serviceConfig scheduler.ServiceConfig) {
 	ds.log.Infoln("Iniciando el despliegue del servicio")
-	labels := map[string]string{
-		"image_name": serviceConfig.ImageName,
-		"image_tag":  serviceConfig.Tag,
-	}
-
-	dockerConfig := docker.Config{
-		Image:  serviceConfig.ImageName + ":" + serviceConfig.Tag,
-		Env:    serviceConfig.Envs,
-		Labels: labels,
-	}
-
-	sourcetype := "{{.Name}}"
-	if serviceConfig.ServiceId != "" {
-		sourcetype = serviceConfig.ServiceId
-	}
-
-	dockerHostConfig := docker.HostConfig{
-		Binds:           []string{"/var/log/service/:/var/log/service/"},
-		CPUShares:       int64(serviceConfig.CpuShares),
-		PortBindings:    ds.bindPort(serviceConfig.Publish),
-		PublishAllPorts: false,
-		Privileged:      false,
-		LogConfig: docker.LogConfig{
-			Type: "syslog",
-			Config: map[string]string{
-				"tag":             fmt.Sprintf("{{.ImageName}}|%s|{{.ID}}", sourcetype),
-				"syslog-facility": "local1",
-			},
-		},
-	}
-
-	if serviceConfig.Memory != 0 {
-		dockerHostConfig.Memory = serviceConfig.Memory
-	}
-
-	opts := docker.CreateContainerOptions{
-		Config:     &dockerConfig,
-		HostConfig: &dockerHostConfig}
 
 	var err error
-	ds.container, err = ds.dockerCli().CreateAndRun(opts)
+	ds.serviceInfo, err = ds.clusterScheduler.CreateAndRun(serviceConfig)
 
 	if err != nil {
 		ds.log.Errorf("Se produjo un error al arrancar el contenedor: %s", err)
@@ -244,12 +151,12 @@ func (ds *DockerService) Undeploy() {
 		return
 	}
 
-	if ds.container == nil || ds.container.ID == "" {
+	if ds.serviceInfo == nil || ds.serviceInfo.ID == "" {
 		ds.log.Warnln("El servicio no esta asociado a un contenedor")
 		return
 	}
 
-	err := ds.dockerCli().UndeployContainer(ds.container.ID, true, 10)
+	err := ds.clusterScheduler.UndeployContainer(ds.serviceInfo.ID, true, 10)
 	if err != nil {
 		ds.log.Warnln("No se pudo remover el contenedor", err)
 		return
@@ -259,54 +166,38 @@ func (ds *DockerService) Undeploy() {
 }
 
 func (ds *DockerService) ContainerName() string {
-	return ds.container.Name
+	return ds.serviceInfo.ContainerName
 }
 
 func (ds *DockerService) ContainerImageName() string {
-	return ds.container.Config.Image
+	return ds.serviceInfo.ImageName + ":" + ds.serviceInfo.ImageTag
 }
 
 func (ds *DockerService) ContainerSwarmNode() string {
-	if ds.container.Node == nil {
-		return ""
-	}
-	return ds.container.Node.Name
+	return ds.serviceInfo.Host
 }
 
 func (ds *DockerService) ContainerState() string {
-	return ds.container.State.String()
+	return ds.serviceInfo.Status.String()
 }
 
 func (ds *DockerService) Loaded() bool {
 	return ds.loaded
 }
 
-func (ds *DockerService) PublicPorts() map[int64]int64 {
-	ports := make(map[int64]int64)
-	ds.log.Debugf("Api Ports %#v", ds.container.NetworkSettings.PortMappingAPI())
-	for _, val := range ds.container.NetworkSettings.PortMappingAPI() {
-		ds.log.Debugf("Puerto privado [%d] Puerto publico [%d]", val.PrivatePort, val.PublicPort)
-		if val.PrivatePort != 0 && val.PublicPort != 0 {
-			ports[val.PrivatePort] = val.PublicPort
-		}
-	}
-
-	return ports
-}
-
 func (ds *DockerService) AddressAndPort(internalPort int64) (string, error) {
-
-	ds.log.Debugf("Api Ports %#v", ds.container.NetworkSettings.PortMappingAPI())
-	for _, val := range ds.container.NetworkSettings.PortMappingAPI() {
-		ds.log.Debugf("Puerto privado [%d] Puerto publico [%d]", val.PrivatePort, val.PublicPort)
-		if val.PrivatePort == internalPort {
-			addr := val.IP + ":" + strconv.FormatInt(val.PublicPort, 10)
-			ds.log.Debugf("La dirección calculada del servicio es %s", addr)
-			return addr, nil
+	for _, port := range ds.serviceInfo.Ports {
+		if internalPort == port.Internal {
+			for _, pub := range port.Publics {
+				if pub != 0 {
+					return fmt.Sprintf("%s:%d", port.Advertise, pub), nil
+				}
+			}
+			return "", fmt.Errorf("El puerto %d, no tiene un puerto publico", internalPort)
 		}
 	}
 
-	return "", errors.New(fmt.Sprintf("Puerto %s desconocido", internalPort))
+	return "", fmt.Errorf("Puerto %s desconocido", internalPort)
 }
 
 func (ds *DockerService) RunSmokeTest(monitor monitor.Monitor) {

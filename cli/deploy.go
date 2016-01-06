@@ -10,7 +10,7 @@ import (
 
 	"github.com/ch3lo/yale/cluster"
 	"github.com/ch3lo/yale/monitor"
-	"github.com/ch3lo/yale/service"
+	"github.com/ch3lo/yale/scheduler"
 	"github.com/ch3lo/yale/util"
 	"github.com/codegangsta/cli"
 	"github.com/pivotal-golang/bytefmt"
@@ -127,8 +127,8 @@ func deployBefore(c *cli.Context) error {
 	}
 
 	for _, file := range c.StringSlice("env-file") {
-		if err := util.FileExists(file); err != nil {
-			return errors.New(fmt.Sprintf("El archivo %s con variables de entorno no existe", file))
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			return fmt.Errorf("El archivo %s con variables de entorno no existe", file)
 		}
 	}
 
@@ -136,7 +136,7 @@ func deployBefore(c *cli.Context) error {
 }
 
 type callbackResume struct {
-	RegisterId string `json:"RegisterId"`
+	RegisterID string `json:"RegisterId"`
 	Address    string `json:"Address"`
 }
 
@@ -151,9 +151,9 @@ func deployCmd(c *cli.Context) {
 		envs = append(envs, v)
 	}
 
-	serviceConfig := service.ServiceConfig{
-		ServiceId: c.String("service-id"),
-		CpuShares: c.Int("cpu"),
+	serviceConfig := scheduler.ServiceConfig{
+		ServiceID: c.String("service-id"),
+		CPUShares: c.Int("cpu"),
 		Envs:      envs,
 		ImageName: c.String("image"),
 		Publish:   []string{"8080/tcp"}, // TODO desplegar puertos que no sean 8080
@@ -193,7 +193,7 @@ func deployCmd(c *cli.Context) {
 			} else {
 				util.Log.Infof("Se desplegó %s con el tag de registrator %s y dirección %s", services[k].GetId(), services[k].RegistratorId(), addr)
 				containerInfo := callbackResume{
-					RegisterId: services[k].RegistratorId(),
+					RegisterID: services[k].RegistratorId(),
 					Address:    addr,
 				}
 				resume = append(resume, containerInfo)

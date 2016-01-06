@@ -1,10 +1,14 @@
 package cluster
 
 import (
+	"fmt"
+
 	"github.com/Pallinder/go-randomdata"
 	log "github.com/Sirupsen/logrus"
-	"github.com/ch3lo/yale/helper"
+	"github.com/ch3lo/yale/configuration"
 	"github.com/ch3lo/yale/monitor"
+	"github.com/ch3lo/yale/scheduler"
+	"github.com/ch3lo/yale/scheduler/factory"
 	"github.com/ch3lo/yale/service"
 	"github.com/ch3lo/yale/util"
 )
@@ -12,13 +16,13 @@ import (
 type StackStatus int
 
 const (
-	STACK_READY StackStatus = 1 + iota
-	STACK_FAILED
+	StackReady StackStatus = 1 + iota
+	StackFailed
 )
 
 var stackStatus = [...]string{
-	"STACK_READY",
-	"STACK_FAILED",
+	"StackReady",
+	"StackFailed",
 }
 
 func (s StackStatus) String() string {
@@ -27,8 +31,8 @@ func (s StackStatus) String() string {
 
 type Stack struct {
 	id                    string
-	dockerApiHelper       *helper.DockerHelper
-	services              []*service.DockerService // refactorizar a interfaz service
+	clusterScheduler      scheduler.Scheduler
+	services              []*service.DockerService
 	serviceIdNotification chan string
 	stackNofitication     chan<- StackStatus
 	smokeTestMonitor      monitor.Monitor
@@ -36,21 +40,30 @@ type Stack struct {
 	log                   *log.Entry
 }
 
-func NewStack(stackKey string, stackNofitication chan<- StackStatus, dh *helper.DockerHelper) *Stack {
+func NewStack(stackKey string, stackNofitication chan<- StackStatus, config configuration.Cluster) (*Stack, error) {
+	if config.Disabled {
+		return nil, &ClusterDisabled{Name: stackKey}
+	}
+
+	clusterScheduler, err := factory.Create(config.Scheduler.Type(), config.Scheduler.Parameters())
+	if err != nil {
+		return nil, fmt.Errorf("Error al crear el scheduler %s en %s. %s", config.Scheduler.Type(), stackKey, err.Error())
+	}
+
 	s := new(Stack)
 	s.id = stackKey
 	s.stackNofitication = stackNofitication
-	s.dockerApiHelper = dh
+	s.clusterScheduler = clusterScheduler
 	s.serviceIdNotification = make(chan string, 1000)
 
-	s.log = util.Log.WithFields(log.Fields{
+	util.Log.WithFields(log.Fields{
 		"stack": stackKey,
-	})
+	}).Infof("Se creo un nuevo scheduler %s", config.Scheduler.Type())
 
-	return s
+	return s, nil
 }
 
-func (s *Stack) createId() string {
+func (s *Stack) createID() string {
 	for {
 		key := s.id + "_" + randomdata.Adjective()
 		exist := false
@@ -84,12 +97,12 @@ func (s *Stack) createMonitor(config monitor.MonitorConfig) monitor.Monitor {
 	return mon
 }
 
-func (s *Stack) DeployCheckAndNotify(serviceConfig service.ServiceConfig, smokeConfig monitor.MonitorConfig, warmConfig monitor.MonitorConfig, instances int, tolerance float64) {
+func (s *Stack) DeployCheckAndNotify(serviceConfig scheduler.ServiceConfig, smokeConfig monitor.MonitorConfig, warmConfig monitor.MonitorConfig, instances int, tolerance float64) {
 	currentContainers := s.countServicesWithState(service.RUNNING)
 
 	if currentContainers == instances {
 		s.log.Infoln("El Stack ya estaba desplegado. Omitiendo...")
-		s.setStatus(STACK_READY)
+		s.setStatus(StackReady)
 	} else if currentContainers < instances {
 		diff := instances - currentContainers
 		s.log.Printf("El Stack tenia %d instancias. Se desplegaran %d instancias más.", currentContainers, diff)
@@ -102,16 +115,16 @@ func (s *Stack) DeployCheckAndNotify(serviceConfig service.ServiceConfig, smokeC
 		}
 
 		if s.checkInstances(serviceConfig, diff, tolerance) {
-			s.setStatus(STACK_READY)
+			s.setStatus(StackReady)
 			return
 		}
 
-		s.setStatus(STACK_FAILED)
+		s.setStatus(StackFailed)
 	} else {
 		diff := currentContainers - instances
 		s.log.Printf("El Stack tenia más instancias de las necesarias (%d from %d). Comenzando el undeploy...", currentContainers, instances)
 		s.UndeployInstances(diff)
-		s.setStatus(STACK_READY)
+		s.setStatus(StackReady)
 	}
 }
 
@@ -123,14 +136,14 @@ func (s *Stack) addNewService(dockerService *service.DockerService) {
 	s.services = append(s.services, dockerService)
 }
 
-func (s *Stack) deployOneInstance(serviceConfig service.ServiceConfig) {
-	dockerService := service.NewDockerService(s.createId(), s.dockerApiHelper, s.serviceIdNotification)
+func (s *Stack) deployOneInstance(serviceConfig scheduler.ServiceConfig) {
+	dockerService := service.NewDockerService(s.createID(), s.clusterScheduler, s.serviceIdNotification)
 	s.addNewService(dockerService)
 	dockerService.Run(serviceConfig)
 }
 
-func (s *Stack) undeployInstance(serviceId string) {
-	dockerService := s.getService(serviceId)
+func (s *Stack) undeployInstance(serviceID string) {
+	dockerService := s.getService(serviceID)
 	dockerService.Undeploy()
 }
 
@@ -154,9 +167,9 @@ func (s *Stack) UndeployInstances(total int) {
 	}
 }
 
-func (s *Stack) getService(serviceId string) *service.DockerService {
-	for key, _ := range s.services {
-		if s.services[key].GetId() == serviceId {
+func (s *Stack) getService(serviceID string) *service.DockerService {
+	for key := range s.services {
+		if s.services[key].GetId() == serviceID {
 			return s.services[key]
 		}
 	}
@@ -192,14 +205,14 @@ func (s *Stack) countServicesWithState(state service.State) int {
 	return len(s.ServicesWithState(state))
 }
 
-func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstances int, tolerance float64) bool {
+func (s *Stack) checkInstances(serviceConfig scheduler.ServiceConfig, totalInstances int, tolerance float64) bool {
 	for {
 		s.log.Infoln("Esperando notificación de los servicios")
-		serviceId := <-s.serviceIdNotification
-		s.log.Infoln("Notificación recibida del Servicio", serviceId)
+		serviceID := <-s.serviceIdNotification
+		s.log.Infoln("Notificación recibida del Servicio", serviceID)
 
-		dockerService := s.getService(serviceId) // que pasa si dockerService es nil?
-		s.log.Infof("Notificación del Servicio %s tiene estado %s", serviceId, dockerService.GetStep())
+		dockerService := s.getService(serviceID) // que pasa si dockerService es nil?
+		s.log.Infof("Notificación del Servicio %s tiene estado %s", serviceID, dockerService.GetStep())
 
 		okInstances := s.countServicesWithStep(service.STEP_WARM_READY)
 
@@ -243,23 +256,23 @@ func (s *Stack) checkInstances(serviceConfig service.ServiceConfig, totalInstanc
 
 func (s *Stack) LoadFilteredContainers(imageNameFilter string, tagFilter string, containerNameFilter string) error {
 	util.Log.Debugf("Cargando contenedores con filtros: imagen %s - nombre contenedor %s", imageNameFilter, containerNameFilter)
-	filter := helper.NewContainerFilter()
+	filter := scheduler.NewContainerFilter()
 	//filter.GetStep() = []string{"running"}
 	filter.ImageRegexp = imageNameFilter
 	filter.TagRegexp = tagFilter
 	filter.NameRegexp = containerNameFilter
 
-	containers, err := s.dockerApiHelper.ListContainers(filter)
+	containers, err := s.clusterScheduler.ListContainers(filter)
 	if err != nil {
 		return err
 	}
 
 	for k := range containers {
-		c, err := s.dockerApiHelper.ContainerInspect(containers[k].ID)
+		/*c, err := s.clusterScheduler.ContainerInspect(containers[k].ID)
 		if err != nil {
 			return err
-		}
-		s.services = append(s.services, service.NewFromContainer(s.createId(), s.dockerApiHelper, c, s.serviceIdNotification))
+		}*/
+		s.services = append(s.services, service.NewFromContainer(s.createID(), s.clusterScheduler, containers[k], s.serviceIdNotification))
 	}
 
 	return nil
@@ -268,17 +281,17 @@ func (s *Stack) LoadFilteredContainers(imageNameFilter string, tagFilter string,
 func (s *Stack) LoadTaggedContainers(imageName string, tag string) error {
 	util.Log.Debugf("Cargando contenedores filtrando por TAG con filtros: imagen %s - tag %s", imageName, tag)
 
-	containers, err := s.dockerApiHelper.ListTaggedContainers(imageName, tag)
+	containers, err := s.clusterScheduler.ListTaggedContainers(imageName, tag)
 	if err != nil {
 		return err
 	}
 
 	for k := range containers {
-		c, err := s.dockerApiHelper.ContainerInspect(containers[k].ID)
+		/*c, err := s.clusterScheduler.ContainerInspect(containers[k].ID)
 		if err != nil {
 			return err
-		}
-		s.services = append(s.services, service.NewFromContainer(s.createId(), s.dockerApiHelper, c, s.serviceIdNotification))
+		}*/
+		s.services = append(s.services, service.NewFromContainer(s.createID(), s.clusterScheduler, containers[k], s.serviceIdNotification))
 	}
 
 	return nil
