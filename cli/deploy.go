@@ -41,11 +41,6 @@ func deployFlags() []cli.Flag {
 			Name:  "tag",
 			Usage: "TAG de la imagen",
 		},
-		cli.StringSliceFlag{
-			Name:  "port",
-			Value: &cli.StringSlice{"8080"},
-			Usage: "Puerto interno del contenedor a exponer en el Host",
-		},
 		cli.IntFlag{
 			Name:  "cpu",
 			Value: 0,
@@ -156,7 +151,6 @@ func deployCmd(c *cli.Context) {
 		CpuShares: c.Int("cpu"),
 		Envs:      envs,
 		ImageName: c.String("image"),
-		Publish:   []string{"8080/tcp"}, // TODO desplegar puertos que no sean 8080
 		Tag:       c.String("tag"),
 	}
 

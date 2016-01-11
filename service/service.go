@@ -63,7 +63,6 @@ type ServiceConfig struct {
 	Envs      []string
 	ImageName string
 	Memory    int64
-	Publish   []string
 	Tag       string
 }
 
@@ -77,7 +76,7 @@ func (s *ServiceConfig) Version() string {
 }
 
 func (s *ServiceConfig) String() string {
-	return fmt.Sprintf("ImageName: %s - Tag: %s - CpuShares: %d - Memory: %s - Publish: %#v - Envs: %s", s.ImageName, s.Tag, s.CpuShares, s.Memory, s.Publish, util.MaskEnv(s.Envs))
+	return fmt.Sprintf("ImageName: %s - Tag: %s - CpuShares: %d - Memory: %s - Envs: %s", s.ImageName, s.Tag, s.CpuShares, s.Memory, util.MaskEnv(s.Envs))
 }
 
 type DockerService struct {
@@ -202,8 +201,7 @@ func (ds *DockerService) Run(serviceConfig ServiceConfig) {
 	dockerHostConfig := docker.HostConfig{
 		Binds:           []string{"/var/log/service/:/var/log/service/"},
 		CPUShares:       int64(serviceConfig.CpuShares),
-		PortBindings:    ds.bindPort(serviceConfig.Publish),
-		PublishAllPorts: false,
+		PublishAllPorts: true,
 		Privileged:      false,
 		LogConfig: docker.LogConfig{
 			Type: "syslog",
