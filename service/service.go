@@ -203,6 +203,7 @@ func (ds *DockerService) Run(serviceConfig ServiceConfig) {
 		CPUShares:       int64(serviceConfig.CpuShares),
 		PublishAllPorts: true,
 		Privileged:      false,
+		RestartPolicy:   docker.RestartPolicy{Name: "on-failure", MaximumRetryCount: 1},
 		LogConfig: docker.LogConfig{
 			Type: "syslog",
 			Config: map[string]string{
