@@ -34,8 +34,8 @@ const (
 )
 
 var (
-	decimal = regexp.MustCompile(`^[0-9]+(.[0-9]+?)$`)
-	percent = regexp.MustCompile(`^[0-9]+(.[0-9]+?)%$`)
+	decimal = regexp.MustCompile(`^\d*\.?\d*$`)
+	percent = regexp.MustCompile(`^\d*\.?\d*$%$`)
 )
 
 type Table struct {
@@ -56,6 +56,7 @@ type Table struct {
 	tRow     int
 	align    int
 	rowLine  bool
+	hdrLine  bool
 	border   bool
 	colSize  int
 }
@@ -81,6 +82,7 @@ func NewWriter(writer io.Writer) *Table {
 		tRow:     -1,
 		align:    ALIGN_DEFAULT,
 		rowLine:  false,
+		hdrLine:  true,
 		border:   true,
 		colSize:  -1}
 	return t
@@ -154,6 +156,12 @@ func (t *Table) SetAlignment(align int) {
 	t.align = align
 }
 
+// Set Header Line
+// This would enable / disable a line after the header
+func (t *Table) SetHeaderLine(line bool) {
+	t.hdrLine = line
+}
+
 // Set Row Line
 // This would enable / disable a line on each row of the table
 func (t *Table) SetRowLine(line bool) {
@@ -167,7 +175,7 @@ func (t *Table) SetBorder(border bool) {
 }
 
 // Append row to table
-func (t *Table) Append(row []string) error {
+func (t *Table) Append(row []string) {
 	rowSize := len(t.headers)
 	if rowSize > t.colSize {
 		t.colSize = rowSize
@@ -186,19 +194,14 @@ func (t *Table) Append(row []string) error {
 		line = append(line, out)
 	}
 	t.lines = append(t.lines, line)
-	return nil
 }
 
 // Allow Support for Bulk Append
 // Eliminates repeated for loops
-func (t *Table) AppendBulk(rows [][]string) (err error) {
+func (t *Table) AppendBulk(rows [][]string) {
 	for _, row := range rows {
-		err = t.Append(row)
-		if err != nil {
-			return err
-		}
+		t.Append(row)
 	}
-	return nil
 }
 
 // Print line based on row width
@@ -245,7 +248,9 @@ func (t Table) printHeading() {
 	}
 	// Next line
 	fmt.Fprintln(t.out)
-	t.printLine(true)
+	if t.hdrLine {
+		t.printLine(true)
+	}
 }
 
 // Print heading information

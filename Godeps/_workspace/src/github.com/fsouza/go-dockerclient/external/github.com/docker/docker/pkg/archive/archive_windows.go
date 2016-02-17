@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/docker/docker/pkg/longpath"
+	"github.com/fsouza/go-dockerclient/external/github.com/docker/docker/pkg/longpath"
 )
 
 // fixVolumePathPrefix does platform specific processing to ensure that if
@@ -19,7 +19,7 @@ func fixVolumePathPrefix(srcPath string) string {
 }
 
 // getWalkRoot calculates the root path when performing a TarWithOptions.
-// We use a seperate function as this is platform specific.
+// We use a separate function as this is platform specific.
 func getWalkRoot(srcPath string, include string) string {
 	return filepath.Join(srcPath, include)
 }

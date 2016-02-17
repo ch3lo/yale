@@ -1,82 +1,44 @@
 {
 	"ImportPath": "github.com/ch3lo/yale",
-	"GoVersion": "go1.4.2",
+	"GoVersion": "go1.5",
+	"Packages": [
+		"./..."
+	],
 	"Deps": [
 		{
 			"ImportPath": "github.com/Pallinder/go-randomdata",
-			"Rev": "bb2ec5ce70e0fb762ea90618c9d497fb36fe9113"
+			"Rev": "4134a721d6473f81816b1799866bf3e553a9b8d4"
 		},
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
-			"Comment": "v0.8.7-33-g62f85a2",
-			"Rev": "62f85a2e398fb4cae34ecd1db528422ede248d3c"
+			"Comment": "v0.9.0-3-g3455d89",
+			"Rev": "3455d89ac9652295c85db2a98ea32f1d61c380bc"
 		},
 		{
 			"ImportPath": "github.com/codegangsta/cli",
-			"Comment": "1.2.0-161-gf445c89",
-			"Rev": "f445c894402839580d30de47551cedc152dad814"
-		},
-		{
-			"ImportPath": "github.com/docker/docker/pkg/fileutils",
-			"Comment": "v1.4.1-7144-g448398c",
-			"Rev": "448398c2a8a41b6589dd7deb59fdc889e78db223"
-		},
-		{
-			"ImportPath": "github.com/docker/docker/pkg/idtools",
-			"Comment": "v1.4.1-7144-g448398c",
-			"Rev": "448398c2a8a41b6589dd7deb59fdc889e78db223"
-		},
-		{
-			"ImportPath": "github.com/docker/docker/pkg/ioutils",
-			"Comment": "v1.4.1-7144-g448398c",
-			"Rev": "448398c2a8a41b6589dd7deb59fdc889e78db223"
-		},
-		{
-			"ImportPath": "github.com/docker/docker/pkg/parsers",
-			"Comment": "v1.4.1-7144-g448398c",
-			"Rev": "448398c2a8a41b6589dd7deb59fdc889e78db223"
-		},
-		{
-			"ImportPath": "github.com/docker/docker/pkg/pools",
-			"Comment": "v1.4.1-7144-g448398c",
-			"Rev": "448398c2a8a41b6589dd7deb59fdc889e78db223"
-		},
-		{
-			"ImportPath": "github.com/docker/docker/pkg/promise",
-			"Comment": "v1.4.1-7144-g448398c",
-			"Rev": "448398c2a8a41b6589dd7deb59fdc889e78db223"
-		},
-		{
-			"ImportPath": "github.com/docker/docker/pkg/system",
-			"Comment": "v1.4.1-7144-g448398c",
-			"Rev": "448398c2a8a41b6589dd7deb59fdc889e78db223"
-		},
-		{
-			"ImportPath": "github.com/docker/docker/pkg/ulimit",
-			"Comment": "v1.4.1-7144-g448398c",
-			"Rev": "448398c2a8a41b6589dd7deb59fdc889e78db223"
-		},
-		{
-			"ImportPath": "github.com/docker/docker/pkg/units",
-			"Comment": "v1.4.1-7144-g448398c",
-			"Rev": "448398c2a8a41b6589dd7deb59fdc889e78db223"
-		},
-		{
-			"ImportPath": "github.com/docker/docker/volume",
-			"Comment": "v1.4.1-7144-g448398c",
-			"Rev": "448398c2a8a41b6589dd7deb59fdc889e78db223"
+			"Comment": "1.2.0-215-g0ab42fd",
+			"Rev": "0ab42fd482c27cf2c95e7794ad3bb2082c2ab2d7"
 		},
 		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
-			"Rev": "0c270fe398313b06afc3c27124de62c2d6af57b4"
+			"Rev": "eb4222e1e62b910897277d93338c1555a9b7d91b"
+		},
+		{
+			"ImportPath": "github.com/mattn/go-runewidth",
+			"Comment": "travisish-45-gd037b52",
+			"Rev": "d037b52ae5c0338c2bb18da01fb7ddf0e8be9aa1"
 		},
 		{
 			"ImportPath": "github.com/olekukonko/tablewriter",
-			"Rev": "b9346ac189c55dd419f85c7ad2cd56f810bf19d6"
+			"Rev": "cca8bbc0798408af109aaaa239cbd2634846b340"
 		},
 		{
 			"ImportPath": "github.com/pivotal-golang/bytefmt",
-			"Rev": "eb6a478daea5cd564c230719240761a1a2ccc713"
+			"Rev": "263ce04fc1d71bc7d50c241293488b3f54c779e5"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/unix",
+			"Rev": "50c6bc5e4292a1d4e65c6e9be5f53be28bcbe28e"
 		}
 	]
 }
