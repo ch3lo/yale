@@ -48,6 +48,7 @@ func (sm *StackManager) AppendStack(dh *helper.DockerHelper) {
 func (sm *StackManager) Deploy(serviceConfig service.ServiceConfig, smokeConfig monitor.MonitorConfig, warmConfig monitor.MonitorConfig, instances int, tolerance float64) bool {
 	for stackKey, _ := range sm.stacks {
 		if err := sm.stacks[stackKey].LoadFilteredContainers(serviceConfig.ImageName, serviceConfig.Tag, ".*"); err != nil {
+			util.Log.Errorf("Se produjo un error en el stack %s. ", stackKey, err.Error())
 			return false
 		}
 	}
